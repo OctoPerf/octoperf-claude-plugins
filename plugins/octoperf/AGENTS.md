@@ -15,10 +15,22 @@ scenarios, and read back metrics — all without leaving the chat.
 The server speaks OAuth 2.1 + PKCE + DCR. There is **no API key**; every
 tool call carries a short-lived JWT minted from your user identity.
 
+**Claude Code — quickest path: the official plugin.** It bundles the MCP
+server registration, this `AGENTS.md`, and the six workflow skills in
+one install:
+
+```text
+/plugin marketplace add OctoPerf/octoperf-claude-plugins
+/plugin install octoperf@octoperf
+```
+
+For everything else, register the MCP endpoint manually:
+
 | Client                 | Setup                                                                                                  |
 |------------------------|--------------------------------------------------------------------------------------------------------|
 | Claude.ai              | Settings → Connectors → Add Custom Connector → `https://api.octoperf.com/mcp`                          |
-| Claude Code / Desktop  | `claude mcp add octoperf --transport http https://api.octoperf.com/mcp`                                |
+| Claude Code (manual)   | `claude mcp add octoperf --transport http https://api.octoperf.com/mcp`                                |
+| Claude Desktop         | Add the MCP server URL `https://api.octoperf.com/mcp` in `claude_desktop_config.json`                  |
 | Cursor / Continue.dev  | Add the MCP server URL `https://api.octoperf.com/mcp` in the MCP config; browser opens for OAuth login |
 | MCP Inspector          | `npx @modelcontextprotocol/inspector https://api.octoperf.com/mcp` (Streamable HTTP)                   |
 
@@ -364,3 +376,4 @@ When validation has many failures, don't read them all serially:
 - OctoPerf docs: <https://api.octoperf.com/doc>
 - OctoPerf blog: <https://blog.octoperf.com>
 - OctoPerf tutorials: <https://www.iorad.com/help-center/159034?roleId=7490>
+- Claude Code plugin marketplace: <https://github.com/OctoPerf/octoperf-claude-plugins>
