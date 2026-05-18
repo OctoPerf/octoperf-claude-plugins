@@ -85,16 +85,21 @@ row is the **VU's root container** (no parent in the action tree),
 the value is the *whole iteration's wall-clock* — including thinktime.
 Ignore the container row when looking for slow *real* actions.
 
-### Metric subtypes — not all are time-series
+### Metric subtypes — not every sub-count is on every widget
 
-For each metric, only some sub-counts are queryable on each widget:
+For the full per-widget allow-list, see the
+[hit-metrics availability table](https://doc.octoperf.com/analysis/edit-bench-report/performance-metrics/#hit-metrics-availability)
+in the public doc. The recurring picks that trip up an LLM:
 
-- `Hits`: `Total` / `Total Successful` / `Rate` / `% Successful` — only `Rate` is time-series (use on LineChart); the others are scalars (Summary / Table).
-- `Errors`: `Total` / `Rate` / `% Error` — `% Error` is on a **0..100 scale**, so Insight thresholds expressed as integers in 0..100 compare to it directly.
-- `Network Time = Response Time − Latency` — pre-computed server-side; the value is real even if no `Latency` curve appears in the report.
+- `Hits` (`Total` / `Total Successful` / `Rate` / `% Successful`) and `Errors` (`Total` / `Rate` / `% Error`) are accepted on Line, Summary, Table/Tree, Bar, Area. `Top` excludes `Rate` for both; `Percentiles` accepts only `Total` + `Rate` for Hits and only `Total` + `Rate` for Errors (no `% Error`).
+- `Errors % Error` is on a **0..100 scale**, so Insight thresholds expressed as integers in 0..100 compare to it directly.
+- `Median` (`RESPONSE_TIME_MEDIAN`) is on **Summary / Table / Tree / Bar** only — not on Line, Top, Percentiles or Area.
+- The discrete percentiles `RESPONSE_TIME_PERCENTILE_80 / 90 / 95 / 99` live on **Summary / Table / Tree / Bar / Area** only. The `PercentilesChartReportItem` widget plots a *continuous percentile curve* from a base metric (Response Time, Latency, …) and does **not** accept these discrete percentile sub-counts as metrics — picking one for a Percentiles widget is a mismatch.
+- `Apdex` is defined on `Response Time / Connect Time / Latency` only, on Line, Summary, Table, Tree, Bar, Area — never on Top or Percentiles. It requires `satisfying` + `tolerating` thresholds, falling back to the global `ApdexReportConfig` on the report when unset on the metric.
+- `Network Time = Response Time − Latency` — pre-computed server-side; the value is real even if no `Latency` curve appears in the report. No `StdDev` or `Apdex` variant exists.
 - `Received Data` only supports `Total` and `Rate`; `Sent Data` adds `Average / Min / Max / StdDev / Total / Rate`. Asking for `Received Data Average` returns nothing.
-- `Apdex` is only defined on `Response Time / Connect Time / Latency`. It requires `satisfying` + `tolerating` thresholds, falling back to the global `ApdexReportConfig` on the report when unset on the metric.
-- `HTTP methods` / `HTTP response codes` / `Media types count` / `Media types throughput` only appear on `PieChartReportItem` and `StackedChartReportItem` — they're not in the standard hit-metrics availability table.
+- `UserLoad` is a **monitor sample** (not a hit metric). It shows up as the load-curve overlay on Line / Bar / Area charts but isn't selectable through the same picker as hit metrics.
+- `HTTP methods` / `HTTP response codes` / `Media types count` / `Media types throughput` only appear on `PieChartReportItem` and `StackedChartReportItem` — they're not in the hit-metrics availability table.
 
 ### Cache hits (304s) skew global numbers
 
