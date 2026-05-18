@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "octoperf": {
+      "type": "http",
+      "url": "https://api.octoperf.com/mcp"
+    }
+  }
+}

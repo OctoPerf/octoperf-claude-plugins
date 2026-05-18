@@ -1,0 +1,24 @@
+{
+  "name": "octoperf",
+  "owner": {
+    "name": "OctoPerf",
+    "email": "support@octoperf.com",
+    "url": "https://octoperf.com"
+  },
+  "metadata": {
+    "description": "OctoPerf load-testing tools for Claude Code: MCP server + workflow skills",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "octoperf",
+      "source": "./plugins/octoperf",
+      "description": "Connects Claude Code to the OctoPerf MCP server and installs load-testing workflow skills (auto-correlation, validation triage, scenario diagnosis, bench-report reading, real-browser probe, scheduling).",
+      "version": "0.1.0",
+      "category": "devops",
+      "keywords": ["octoperf", "load-testing", "performance", "jmeter", "mcp"],
+      "homepage": "https://octoperf.com",
+      "license": "Apache-2.0"
+    }
+  ]
+}
