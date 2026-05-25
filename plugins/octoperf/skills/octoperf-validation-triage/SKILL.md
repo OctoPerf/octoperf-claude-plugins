@@ -130,7 +130,7 @@ clear the largest category, then:
 
 ```
 mcp__octoperf__validate_virtual_user(projectId, virtualUserId, providerId, location, iterations=1)
-mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)
+mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)  # poll — see octoperf-async-polling
 ```
 
 Re-fetch the failure index. Verify:
@@ -168,15 +168,15 @@ HAR archives) the line-based reader returns garbage. Use the
 binary-aware tool instead:
 
 ```
-mcp__octoperf__fetch_bench_result_file(benchResultId, filename)
-# returns { filename, mimeType, sizeBytes, contentBase64 } — capped at 5 MB
+mcp__octoperf__download_bench_result_file(benchResultId, filename)
+# returns { url, method: "GET", expiresAt, instructions }
 ```
 
-Decode `contentBase64` locally and inspect (e.g. `base64 -d > trace.zip
-&& unzip -p trace.zip trace.trace`). This is especially valuable for
-Playwright VU failures — the JMeter wrapper log only sees the spawn,
-the actual selector miss / timeout / navigation abort lives in the
-trace.
+GET `url` directly with your code interpreter (single-use token,
+valid ~5 minutes) and inspect the bytes locally (e.g. `unzip -p
+trace.zip trace.trace`). This is especially valuable for Playwright
+VU failures — the JMeter wrapper log only sees the spawn, the actual
+selector miss / timeout / navigation abort lives in the trace.
 
 ### 6. Stop conditions
 
@@ -223,3 +223,4 @@ Apply the ERROR fixes first — validation is blocked until those clear.
 
 - `octoperf-auto-correlation` — for the "auth / state" category.
 - `octoperf-scenario-diagnosis` — for diagnosing problems that appear under load but not in validation.
+- `octoperf-async-polling` — sleep cadence and terminal conditions for `get_virtual_user_validation` / `get_bench_result`.

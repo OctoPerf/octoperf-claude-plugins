@@ -6,7 +6,7 @@ Drop it at your project root and your agent will pick it up automatically.
 
 OctoPerf is a load-testing platform. The MCP server exposes its REST API
 as MCP tools so an agent can: import Virtual Users (HAR / JMX / Postman /
-Playwright / WebDriver / URLs / archive), edit them (variables, HTTP
+Playwright / WebDriver / URLs), edit them (variables, HTTP
 servers, correlation rules), validate them functionally, run load
 scenarios, and read back metrics — all without leaving the chat.
 
@@ -16,7 +16,7 @@ The server speaks OAuth 2.1 + PKCE + DCR. There is **no API key**; every
 tool call carries a short-lived JWT minted from your user identity.
 
 **Claude Code — quickest path: the official plugin.** It bundles the MCP
-server registration, this `AGENTS.md`, and the six workflow skills in
+server registration, this `AGENTS.md`, and the eight workflow skills in
 one install:
 
 ```text
@@ -39,6 +39,36 @@ For self-hosted Enterprise, swap the host for your instance (e.g.
 `http://localhost:8091/mcp`.
 
 Revoke at any time from **Account → Connected applications** on OctoPerf.
+
+### Claude.ai web: allow the OctoPerf host for presigned URLs
+
+Tools that move file bytes — `upload_project_file`,
+`download_project_file`, `download_bench_result_file`, the PDF leg of
+`export_bench_report_pdf`, and any Playwright trace / HAR / JTL pull —
+return a short-lived **presigned URL** pointing at the OctoPerf REST
+API (same origin as the MCP server: `https://api.octoperf.com`, or
+your self-hosted host). On Claude.ai web, the OAuth trust granted
+when connecting the MCP server does **not** authorize Claude's sandbox
+to reach that host: a workspace admin must add `octoperf.com` (or
+`*.octoperf.com` to also cover an on-prem deployment) under
+**Claude.ai → Organization Settings (Admin only) → Capabilities →
+Domain allowlist → Additional allowed domains**. The dropdown can
+stay on **None** (no preset list needed); the manual entry alone is
+enough. The setting is org-scoped: members inherit it, no per-user
+action required.
+
+This limitation only applies to the Claude.ai web (and Desktop)
+clients. Claude Code CLI, Cursor, Continue.dev and MCP Inspector
+execute the fetch themselves and are not gated by this allowlist.
+
+We intentionally do **not** offer a base64 / inline fallback for these
+tools: the MCP tool-call payload is bounded by the model's token
+budget (~500 KB raw), which would break legitimate large-file flows
+(Playwright `trace.zip`, multi-hundred-MB HAR captures, full JTL logs,
+PDF reports). Maintaining two parallel toolsets would also double the
+schema surface. The structural fix has to come from the MCP client
+honouring server-declared trusted domains — tracked upstream at
+<https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1541>.
 
 ## Tool catalogue
 
@@ -78,22 +108,37 @@ All tools are also exposed as same-named MCP prompts (slash commands
 
 All `import_*_virtual_user` tools (and `upload_jmx_virtual_user`) return
 the same `VirtualUserListing` (id, name, description, tags, created,
-lastModified, url). File source = exactly one of `filePath` (local path
-on the MCP host), `fileUrl` (HTTPS the server can `GET`), or
-`fileContent` (Base64 inline blob with optional `fileName` override).
+lastModified, url). File source = exactly one of `fileUrl` (HTTPS the
+MCP server can `GET`) or `fileContent` (Base64 inline blob with required
+`fileName`). Local-disk paths are intentionally **not** accepted — the
+MCP server is typically remote.
 
-| Tool                              | Source                            |
-|-----------------------------------|-----------------------------------|
-| `import_har_virtual_user`         | HAR capture                       |
-| `import_postman_virtual_user`     | Postman v2.1 JSON                 |
-| `import_playwright_virtual_user`  | Playwright project root (path)    |
-| `import_webdriver_virtual_user`   | URL list → browser VU             |
-| `import_urls_virtual_user`        | URL list → HTTP VU                |
-| `import_archive_virtual_user`     | Previously exported `.zip` VU     |
-| `upload_jmx_virtual_user`         | JMeter `.jmx` (local path only)   |
-| `update_virtual_user`             | Edit metadata (name/description/tags); tree untouched |
-| `patch_virtual_user`              | Edit the action tree via RFC 6902 JSON Patch          |
-| `delete_virtual_user`             | **Destructive** — drops the tree  |
+| Tool                              | Source                                                                                   |
+|-----------------------------------|------------------------------------------------------------------------------------------|
+| `import_har_virtual_user`         | HAR capture                                                                              |
+| `import_postman_virtual_user`     | Postman v2.1 JSON                                                                        |
+| `import_playwright_virtual_user`  | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
+| `import_webdriver_virtual_user`   | URL list → browser VU                                                                    |
+| `import_urls_virtual_user`        | URL list → HTTP VU                                                                       |
+| `upload_jmx_virtual_user`         | JMeter `.jmx`                                                                            |
+| `update_virtual_user`             | Edit metadata (name/description/tags); tree untouched                                    |
+| `patch_virtual_user`              | Edit the action tree via RFC 6902 JSON Patch                                             |
+| `delete_virtual_user`             | **Destructive** — drops the tree                                                         |
+
+#### File size limits and the GUI fallback
+
+- `fileContent` (Base64 inline) is bounded by the tool-call token budget.
+  In practice ~500 KB raw content; above that, Claude's context fills up
+  and the tool call fails before reaching the server.
+- `fileUrl` is bounded server-side by `mcp.file-source.max-bytes`
+  (256 MB default). The URL must be reachable from the MCP server (S3
+  presigned link, GitHub raw, gist, internal HTTP …).
+- **When the file is too large for both paths** (e.g. a multi-hundred-MB
+  HAR capture from a long browse session, or the user has no place to
+  host it publicly), don't fail the task: tell the user to upload the
+  file manually through the OctoPerf web UI. Discover the project URL
+  via `list_projects_by_workspace` and point them at it — the UI's
+  import / files pages do the same upload server-side.
 
 ### Variables (parameterization)
 
@@ -124,6 +169,7 @@ on the MCP host), `fileUrl` (HTTPS the server can `GET`), or
 | `list_project_files`       | Files attached to a project                            |
 | `read_project_file_lines`  | Slice of a file by line range                          |
 | `upload_project_file`      | Add / overwrite a file (e.g. CSV used by a variable)   |
+| `download_project_file`    | Presigned GET URL (single-use, ~5 min) to pull a file  |
 | `delete_project_file`      | **Destructive**                                        |
 
 ### Correlation (dynamic-value extraction)
@@ -185,7 +231,7 @@ WebDriver-based virtual users are **capped at 1 concurrent user per UserProfile*
 | `list_bench_docker_logs`              | Docker container logs of the bench launch (same panel the web UI streams) — diagnose ERROR / stuck PREPARING / INITIALIZING runs |
 | `list_bench_result_files`             | JMeter logs + JTL / HAR / screenshots / attachments stored against a benchResultId (also covers validation runs) |
 | `read_bench_result_file_lines`        | Read a contiguous range of lines from one of those files (gzip-transparent; binary files return garbage) |
-| `fetch_bench_result_file`             | Download one file as a base64 blob — Playwright `trace.zip`, screenshots (`.png`), HAR archives, any binary artefact the line reader can't surface. 5 MB cap. |
+| `download_bench_result_file`          | Mint a presigned GET URL (single-use, ~5 min) to pull one bench-result file directly — Playwright `trace.zip`, screenshots (`.png`), HAR archives, any binary artefact the line reader can't surface. |
 
 **Bench-result state machine** — drives when log files / report metrics become available:
 
@@ -212,6 +258,7 @@ CREATED → PENDING → SCALING → PREPARING → INITIALIZING ─┬─→ ERRO
 | `create_trend_report_by_tags`             | TREND report anchored on one benchResult, other points picked by tag intersection on bench results |
 | `create_trend_report_by_name`             | TREND report anchored on one benchResult, other points picked by scenario-name match (EQUALS / CONTAINS / STARTS_WITH / ENDS_WITH, case-sensitive or not) |
 | `create_trend_report_by_creation_date`    | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                       |
+| `export_bench_report_pdf`         | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
 
 ### Analysis — report item values
 
@@ -272,6 +319,11 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/auto-correlation`           | `text/markdown` | Playbook: fix a VU whose validation fails on dynamic values (CSRF tokens, sessions, signed URLs) |
 | `octoperf://skills/validation-triage`          | `text/markdown` | Playbook: triage a VU with many validation failures, group by root cause, fix one per group     |
 | `octoperf://skills/scenario-diagnosis`         | `text/markdown` | Playbook: investigate a poor / failing scenario run (global metrics → drill-in → verdict)        |
+| `octoperf://skills/bench-reports`              | `text/markdown` | Reading guide: widget-by-widget mapping to the right `get_report_*_values` tool, semantic gotchas (Hits vs CONTAINER, trend report DELTA, Playwright row types) |
+| `octoperf://skills/real-browser-probe`         | `text/markdown` | Playbook: compose a hybrid scenario (N×JMeter for load + 1×Playwright probe) for user-perceived metrics during a bench |
+| `octoperf://skills/scheduling`                 | `text/markdown` | Playbook: schedule a scenario one-shot or cron — Unix 5-field UTC format (NOT Quartz), timezone conversion, pause/resume/delete lifecycle |
+| `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult) |
+| `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
 
 ### JSON Schemas (mandatory before any `patch_*`)
 
@@ -300,26 +352,27 @@ error and retry with the same patch corrected.
 Each workflow is a quick-start TL;DR. For deeper playbooks (failure
 catalogues, classification tables, log signatures, …) read the matching
 MCP skill resource via `resources/read` — the server publishes them at
-`octoperf://skills/octoperf-*`:
+`octoperf://skills/*`:
 
 | MCP resource URI                            | When to load                                                                |
 |---------------------------------------------|-----------------------------------------------------------------------------|
-| `octoperf://skills/octoperf-auto-correlation`  | A VU validation fails on session / token / signed-URL replay (workflow 2)   |
-| `octoperf://skills/octoperf-validation-triage` | A VU validation has many failures and you need to triage by root cause (workflow 3) |
-| `octoperf://skills/octoperf-scenario-diagnosis`| A scenario run produced bad / failing metrics and the user wants to know why (workflow 5) |
+| `octoperf://skills/auto-correlation`  | A VU validation fails on session / token / signed-URL replay (workflow 2)   |
+| `octoperf://skills/validation-triage` | A VU validation has many failures and you need to triage by root cause (workflow 3) |
+| `octoperf://skills/scenario-diagnosis`| A scenario run produced bad / failing metrics and the user wants to know why (workflow 5) |
+| `octoperf://skills/async-polling`     | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
 
 ### 1. Import → validate → fix → run
 
 1. `import_*_virtual_user` (HAR, JMX, Postman, …) → returns the new VU id.
 2. `sanity_check_virtual_user` → catches static issues with zero credit cost. Fix anything flagged.
 3. `validate_virtual_user` against a Docker provider/location → starts a 1-user functional run.
-4. Poll `get_virtual_user_validation` until `finished`.
+4. Poll `get_virtual_user_validation` until `finished=true` (see `octoperf://skills/async-polling` for cadence — ~5s between calls).
 5. If failures: `get_virtual_user_validation_index` lists the failing actions; for each, `get_validation_failure_detail` shows the four HTTP entities so you can diagnose. Apply correlation rules or edit variables / servers as needed.
-6. Loop steps 3-5 until clean, then `run_scenario` and watch with `get_bench_status`; once the run is FINISHED, pull the default report with `get_bench_report` and read its SummaryReportItem via `get_report_summary_values`.
+6. Loop steps 3-5 until clean, then `run_scenario` and poll `get_bench_result` until `state ∈ {FINISHED, ABORTED, ERROR}` (use `get_bench_status` for progress display only; see `octoperf://skills/async-polling`); once FINISHED, pull the default report with `get_bench_report` and read its SummaryReportItem via `get_report_summary_values`.
 
 ### 2. Auto-correlation a HAR-imported VU
 
-> Full playbook: `octoperf://skills/octoperf-auto-correlation`.
+> Full playbook: `octoperf://skills/auto-correlation`.
 
 Replays often fail because session tokens, CSRF inputs, or signed URLs
 captured during recording are stale on the next run. Use this recipe:
@@ -331,7 +384,7 @@ captured during recording are stale on the next run. Use this recipe:
 
 ### 3. Triage validation failures across a VU
 
-> Full playbook: `octoperf://skills/octoperf-validation-triage` — includes the KO/OK matrix, the sanity-check message catalogue, and the engine-level-failure branch (read `jmeter.log` when there are no HTTP entities to read).
+> Full playbook: `octoperf://skills/validation-triage` — includes the KO/OK matrix, the sanity-check message catalogue, and the engine-level-failure branch (read `jmeter.log` when there are no HTTP entities to read).
 
 When validation has many failures, don't read them all serially:
 
@@ -349,7 +402,7 @@ When validation has many failures, don't read them all serially:
 
 ### 5. Diagnose a failing / underperforming scenario run
 
-> Full playbook: `octoperf://skills/octoperf-scenario-diagnosis` — includes the global-metrics classification table, jmeter.log signature catalogue (planned stop vs killed by infra vs stall abort), per-sample network-failure signatures (SSLException / SocketTimeoutException / …), the smoke-vs-load error-rate heuristic, and the load-generator-overload trust caveat.
+> Full playbook: `octoperf://skills/scenario-diagnosis` — includes the global-metrics classification table, jmeter.log signature catalogue (planned stop vs killed by infra vs stall abort), per-sample network-failure signatures (SSLException / SocketTimeoutException / …), the smoke-vs-load error-rate heuristic, and the load-generator-overload trust caveat.
 
 1. `get_bench_status(benchResultId)` → confirm the run is terminal (FINISHED / ABORTED / ERROR) before reading metrics.
 2. Find the report tied to the run via `list_bench_reports_by_project(projectId)` filtered on `benchResultIds`.

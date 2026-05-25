@@ -156,19 +156,21 @@ auto-generated names); review and replace with stable selectors
 
 ### 3. Import the Playwright VU
 
-The MCP server accepts a Playwright **project root** (not a single
-spec file) and packages it into a VU:
+The MCP server accepts a **single `.spec.ts` file** and packages it
+into a VU. Helpers, fixtures and any `package.json` are added in a
+second step via `patch_virtual_user`:
 
 ```
 mcp__octoperf__import_playwright_virtual_user(
   projectId,
-  directoryPath='/abs/path/to/playwright-probe')
+  fileUrl='https://your-host/login.spec.ts',
+  fileName='login.spec.ts')
 ```
 
-Returns the new Playwright VU's id. The directory must contain
-`package.json` plus at least one `.ts` / `.js` file. Local-path only
-— this import is multi-file, the `fileUrl` / `fileContent` shortcuts
-that other importers support aren't available here.
+Or `fileContent` (Base64 inline, ~500 KB cap) for a spec that fits
+inline. Returns the new Playwright VU's id. If the spec is too large
+for both paths, tell the user to upload it directly through the
+OctoPerf web UI rather than failing the task.
 
 ### 4. Validate the Playwright VU standalone
 
@@ -192,15 +194,15 @@ abort) is in the Playwright **trace.zip** named
 with the binary-aware tool:
 
 ```
-mcp__octoperf__fetch_bench_result_file(benchResultId, traceFilename)
-# returns { filename, mimeType, sizeBytes, contentBase64 }
+mcp__octoperf__download_bench_result_file(benchResultId, traceFilename)
+# returns { url, method: "GET", expiresAt, instructions }
 ```
 
-Decode `contentBase64` locally and unzip — `trace.trace` (newline-
-delimited JSON of every action) and the screenshots inside give you
-the per-step view. For very large traces (> 5 MB), the tool returns a
-"cap exceeded" error; open the run in the OctoPerf UI's trace viewer
-instead.
+GET `url` directly with your code interpreter (single-use token,
+valid ~5 minutes), then unzip — `trace.trace` (newline-delimited JSON
+of every action) and the screenshots inside give you the per-step
+view. If the token has been consumed or expired, call the tool again
+to mint a fresh URL.
 
 Common Playwright-specific failures:
 

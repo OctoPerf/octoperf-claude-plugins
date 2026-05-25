@@ -159,6 +159,10 @@ mcp__octoperf__validate_virtual_user(projectId, virtualUserId, providerId, locat
 mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)  # poll until finished=true
 ```
 
+Use `octoperf-async-polling` for the polling cadence — validation
+runs are short (~30s) so a 5s sleep between `get_virtual_user_validation`
+calls is plenty.
+
 If failures drop to zero — done. If they shrink but some remain, the
 preset caught most patterns and the rest need a custom rule (next
 step). If they're unchanged or worse, the preset was the wrong fit —
@@ -200,7 +204,7 @@ Then re-walk the VU to apply the new rule:
 
 ```
 mcp__octoperf__apply_correlations_to_virtual_user(projectId, virtualUserId)
-mcp__octoperf__get_task_result(taskId)  # poll
+mcp__octoperf__get_task_result(taskId)  # poll — see octoperf-async-polling (3s cadence)
 ```
 
 Before burning a validation cycle, optionally confirm the rule
@@ -233,4 +237,5 @@ Loop steps 3-4 until validation is clean. Two stop conditions:
 ## See also
 
 - `octoperf-validation-triage` — when validation has many failures of mixed kinds.
+- `octoperf-async-polling` — sleep cadence for `get_virtual_user_validation` and `get_task_result`.
 - OctoPerf correlation docs: <https://doc.octoperf.com/design/correlations/>

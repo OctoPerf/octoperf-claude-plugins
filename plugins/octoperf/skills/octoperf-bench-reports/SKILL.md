@@ -67,7 +67,7 @@ For every widget type that's reachable from MCP:
 Two follow-up tools to keep in mind:
 
 - After `get_report_errors`, drill into a specific failed sample with `fetch_bench_error_http(benchResultId, actionId, timestamp)` — returns the full request + response of that one breach.
-- For non-text bench-result artefacts (Playwright `trace.zip`, screenshots, HAR), `fetch_bench_result_file(benchResultId, filename)` returns a base64 blob. `read_bench_result_file_lines` only handles text.
+- For non-text bench-result artefacts (Playwright `trace.zip`, screenshots, HAR), `download_bench_result_file(benchResultId, filename)` returns a presigned GET URL (single-use, ~5 min) — fetch the bytes directly with your code interpreter. `read_bench_result_file_lines` only handles text.
 
 ## Semantic gotchas
 
@@ -94,7 +94,7 @@ in the public doc. The recurring picks that trip up an LLM:
 - `Hits` (`Total` / `Total Successful` / `Rate` / `% Successful`) and `Errors` (`Total` / `Rate` / `% Error`) are accepted on Line, Summary, Table/Tree, Bar, Area. `Top` excludes `Rate` for both; `Percentiles` accepts only `Total` + `Rate` for Hits and only `Total` + `Rate` for Errors (no `% Error`).
 - `Errors % Error` is on a **0..100 scale**, so Insight thresholds expressed as integers in 0..100 compare to it directly.
 - `Median` (`RESPONSE_TIME_MEDIAN`) is on **Summary / Table / Tree / Bar** only — not on Line, Top, Percentiles or Area.
-- The discrete percentiles `RESPONSE_TIME_PERCENTILE_80 / 90 / 95 / 99` live on **Summary / Table / Tree / Bar / Area** only. The `PercentilesChartReportItem` widget plots a *continuous percentile curve* from a base metric (Response Time, Latency, …) and does **not** accept these discrete percentile sub-counts as metrics — picking one for a Percentiles widget is a mismatch.
+- The discrete percentiles `RESPONSE_TIME_PERCENTILE_80 / 90 / 95 / 99` live on **Line / Summary / Top / Table / Tree / Bar / Area**. The `PercentilesChartReportItem` widget plots a *continuous percentile curve* from a base metric (Response Time, Latency, …) and does **not** accept these discrete percentile sub-counts as metrics — picking one for a Percentiles widget is a mismatch.
 - `Apdex` is defined on `Response Time / Connect Time / Latency` only, on Line, Summary, Table, Tree, Bar, Area — never on Top or Percentiles. It requires `satisfying` + `tolerating` thresholds, falling back to the global `ApdexReportConfig` on the report when unset on the metric.
 - `Network Time = Response Time − Latency` — pre-computed server-side; the value is real even if no `Latency` curve appears in the report. No `StdDev` or `Apdex` variant exists.
 - `Received Data` only supports `Total` and `Rate`; `Sent Data` adds `Average / Min / Max / StdDev / Total / Rate`. Asking for `Received Data Average` returns nothing.

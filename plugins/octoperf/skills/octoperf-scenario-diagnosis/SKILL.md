@@ -18,9 +18,14 @@ You need a `benchResultId` from one of:
 - The return of `mcp__octoperf__run_scenario(scenarioId)`.
 - `mcp__octoperf__list_bench_reports_by_project(projectId)` filtered on `benchResultIds` for the UI deep-link.
 
-If `mcp__octoperf__get_bench_status(benchResultId)` shows progress < 1.0
-the test is still running. Either wait and re-check, or surface what
-*has* been measured so far with the caveat that it may change.
+If `mcp__octoperf__get_bench_result(benchResultId)` shows
+`state ∉ {FINISHED, ABORTED, ERROR}` the test is still running.
+Either wait and re-check, or surface what *has* been measured so far
+with the caveat that it may change. When you do wait, follow
+`octoperf-async-polling` — bounded `Bash sleep` between polls, cadence
+sized to the scenario's expected duration. Use `get_bench_result.state`
+as the terminal check; `get_bench_status` returns elapsed-% and is for
+progress display only.
 
 ## Steps
 
@@ -344,11 +349,12 @@ WAF, DDoS-protection) rather than a real capacity issue.
 
 - **Don't re-run the scenario to "see if it's flaky"** unless the user explicitly asks. `run_scenario` is destructive (consumes credits) and rarely the right next move during diagnosis.
 - **Don't drill into per-action metrics until the global view says you should.** Global metrics narrow the problem class in one call; per-action drilling without that context is expensive (tokens, tool calls).
-- **Don't conclude from a half-finished test.** If `get_bench_status` < 1.0, label the read as preliminary and offer to come back.
+- **Don't conclude from a half-finished test.** If `get_bench_result.state ∉ {FINISHED, ABORTED, ERROR}`, label the read as preliminary and offer to come back. Use the polling cadence in `octoperf-async-polling` to decide when to re-check.
 - **Don't mix "the load test failed" with "the VU is broken".** The right tool is validation, not load. Surface the distinction to the user — they're paying for the credits either way.
 
 ## See also
 
 - `octoperf-validation-triage` — when the VU itself is failing.
 - `octoperf-auto-correlation` — when failures are session/auth-state related.
+- `octoperf-async-polling` — sleep cadence + terminal conditions when waiting on a running bench.
 - OctoPerf bench reports docs: <https://doc.octoperf.com/analysis/bench-reports/>
