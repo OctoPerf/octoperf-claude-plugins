@@ -7,9 +7,9 @@ This repo distributes one plugin (`octoperf`) that:
 
 - registers the hosted **OctoPerf MCP server** (`https://api.octoperf.com/mcp`,
   Streamable HTTP, OAuth 2.1 + PKCE + DCR — no API key);
-- installs six workflow **skills** that drive the MCP tools end-to-end
+- installs eight workflow **skills** that drive the MCP tools end-to-end
   (auto-correlation, validation triage, scenario diagnosis, bench-report
-  reading, real-browser probe, scheduling);
+  reading, PDF export, real-browser probe, scheduling, async polling);
 - ships an `AGENTS.md` reference describing every MCP tool the server
   exposes.
 
@@ -33,14 +33,16 @@ Revoke at any time from **Account → Connected applications** on OctoPerf.
 
 ## Skills
 
-| Skill                          | Triggers on                                                |
-|--------------------------------|------------------------------------------------------------|
-| `octoperf-auto-correlation`    | "correlate the VU", "fix replay errors", "401/403 on replay" |
-| `octoperf-validation-triage`   | "the validation is red", "lots of errors after import"     |
-| `octoperf-scenario-diagnosis`  | "the load test failed", "why are response times so high"   |
-| `octoperf-bench-reports`       | "what's the right tool for this widget", widget metric questions |
-| `octoperf-real-browser-probe`  | "EUM probe", "Playwright probe", "TruClient equivalent"    |
-| `octoperf-scheduling`          | "schedule the scenario", "run every weekday at 8am"        |
+| Skill                              | Triggers on                                                            |
+|------------------------------------|------------------------------------------------------------------------|
+| `octoperf-auto-correlation`        | "correlate the VU", "fix replay errors", "401/403 on replay"           |
+| `octoperf-validation-triage`       | "the validation is red", "lots of errors after import"                 |
+| `octoperf-scenario-diagnosis`      | "the load test failed", "why are response times so high"               |
+| `octoperf-bench-reports`           | "what's the right tool for this widget", widget metric questions       |
+| `octoperf-export-bench-report-pdf` | "export the report as PDF", "print the bench report", "share a PDF"    |
+| `octoperf-real-browser-probe`      | "EUM probe", "Playwright probe", "TruClient equivalent"                |
+| `octoperf-scheduling`              | "schedule the scenario", "run every weekday at 8am"                    |
+| `octoperf-async-polling`           | invoked automatically by any skill that has to poll a `taskId` result  |
 
 
 ## License

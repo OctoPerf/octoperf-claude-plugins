@@ -158,19 +158,26 @@ auto-generated names); review and replace with stable selectors
 
 The MCP server accepts a **single `.spec.ts` file** and packages it
 into a VU. Helpers, fixtures and any `package.json` are added in a
-second step via `patch_virtual_user`:
+second step via `patch_virtual_user`.
+
+`import_playwright_virtual_user` is a presigned upload tool: it mints
+a short-lived URL and returns it; the client then POSTs the spec
+directly to the OctoPerf REST host (bypassing the MCP server for the
+bytes). The REST response is a raw `VirtualUser` JSON without a UI
+deep-link — chain into `describe_virtual_user` to get the compact
+listing.
 
 ```
-mcp__octoperf__import_playwright_virtual_user(
-  projectId,
-  fileUrl='https://your-host/login.spec.ts',
-  fileName='login.spec.ts')
+upload = mcp__octoperf__import_playwright_virtual_user(projectId)
+# POST the spec bytes to `upload.url` as multipart/form-data, single
+# part named `file`, Content-Type `text/plain; charset=utf-8`. Read
+# the returned VU's `id`, then:
+mcp__octoperf__describe_virtual_user(virtualUserId)
 ```
 
-Or `fileContent` (Base64 inline, ~500 KB cap) for a spec that fits
-inline. Returns the new Playwright VU's id. If the spec is too large
-for both paths, tell the user to upload it directly through the
-OctoPerf web UI rather than failing the task.
+If the client can't perform the direct POST (no network, sandbox
+restrictions, file too big for the backend), tell the user to upload
+the spec through the OctoPerf web UI rather than failing the task.
 
 ### 4. Validate the Playwright VU standalone
 

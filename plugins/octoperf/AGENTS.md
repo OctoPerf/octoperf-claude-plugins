@@ -44,10 +44,12 @@ Revoke at any time from **Account → Connected applications** on OctoPerf.
 
 Tools that move file bytes — `upload_project_file`,
 `download_project_file`, `download_bench_result_file`, the PDF leg of
-`export_bench_report_pdf`, and any Playwright trace / HAR / JTL pull —
-return a short-lived **presigned URL** pointing at the OctoPerf REST
-API (same origin as the MCP server: `https://api.octoperf.com`, or
-your self-hosted host). On Claude.ai web, the OAuth trust granted
+`export_bench_report_pdf`, every `import_*_virtual_user` /
+`upload_jmx_virtual_user` that consumes a file (HAR, JMX, Postman,
+Playwright), and any Playwright trace / HAR / JTL pull — return a
+short-lived **presigned URL** pointing at the OctoPerf REST API (same
+origin as the MCP server: `https://api.octoperf.com`, or your
+self-hosted host). On Claude.ai web, the OAuth trust granted
 when connecting the MCP server does **not** authorize Claude's sandbox
 to reach that host: a workspace admin must add `octoperf.com` (or
 `*.octoperf.com` to also cover an on-prem deployment) under
@@ -97,7 +99,8 @@ All tools are also exposed as same-named MCP prompts (slash commands
 
 | Tool                                       | Purpose                                                                 |
 |--------------------------------------------|-------------------------------------------------------------------------|
-| `get_virtual_user`                         | Structure-only tree (actions, containers, no bodies)                    |
+| `get_virtual_user`                         | Full action tree (heavy — polymorphic children, headers, postData, …)   |
+| `describe_virtual_user`                    | Compact `VirtualUserListing` (id, name, tags, timestamps, `url` deep-link) — chain after a presigned import to surface the UI link |
 | `sanity_check_virtual_user`                | Static design checks — non-destructive, no credit cost                  |
 | `get_virtual_user_validation_index`        | Per-action validation failure summary                                   |
 | `get_validation_failure_detail`            | The four HTTP entities of one failing action (sent/recv request/response) |
@@ -106,39 +109,45 @@ All tools are also exposed as same-named MCP prompts (slash commands
 
 ### Virtual User — import
 
-All `import_*_virtual_user` tools (and `upload_jmx_virtual_user`) return
-the same `VirtualUserListing` (id, name, description, tags, created,
-lastModified, url). File source = exactly one of `fileUrl` (HTTPS the
-MCP server can `GET`) or `fileContent` (Base64 inline blob with required
-`fileName`). Local-disk paths are intentionally **not** accepted — the
-MCP server is typically remote.
+Imports split in two shapes:
 
-| Tool                              | Source                                                                                   |
-|-----------------------------------|------------------------------------------------------------------------------------------|
-| `import_har_virtual_user`         | HAR capture                                                                              |
-| `import_postman_virtual_user`     | Postman v2.1 JSON                                                                        |
-| `import_playwright_virtual_user`  | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
-| `import_webdriver_virtual_user`   | URL list → browser VU                                                                    |
-| `import_urls_virtual_user`        | URL list → HTTP VU                                                                       |
-| `upload_jmx_virtual_user`         | JMeter `.jmx`                                                                            |
-| `update_virtual_user`             | Edit metadata (name/description/tags); tree untouched                                    |
-| `patch_virtual_user`              | Edit the action tree via RFC 6902 JSON Patch                                             |
-| `delete_virtual_user`             | **Destructive** — drops the tree                                                         |
+- **File-backed imports** (`import_har_virtual_user`,
+  `import_postman_virtual_user`, `import_playwright_virtual_user`,
+  `upload_jmx_virtual_user`) mint a short-lived presigned upload URL.
+  The client POSTs the file directly to the OctoPerf REST host (bypassing
+  the MCP server for the bytes); the REST response is a raw
+  `VirtualUser` (HAR / Postman / Playwright) or a Virtual User Action
+  array (JMX), neither of which carries a `url` deep-link. **Always
+  chain into `describe_virtual_user`** with each returned `id` to obtain
+  the compact listing and the link to the Virtual User page.
+- **In-process imports** (`import_urls_virtual_user`,
+  `import_webdriver_virtual_user`) accept their input as a tool
+  parameter (URL list) and return a `VirtualUserListing` directly —
+  no follow-up call needed.
 
-#### File size limits and the GUI fallback
+| Tool                              | Shape    | Source                                                                                   |
+|-----------------------------------|----------|------------------------------------------------------------------------------------------|
+| `import_har_virtual_user`         | upload   | HAR capture                                                                              |
+| `import_postman_virtual_user`     | upload   | Postman v2.1 JSON                                                                        |
+| `import_playwright_virtual_user`  | upload   | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
+| `upload_jmx_virtual_user`         | upload   | JMeter `.jmx` (creates one or more VUs)                                                  |
+| `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU                                                                       |
+| `import_webdriver_virtual_user`   | in-proc  | URL list → browser VU                                                                    |
+| `update_virtual_user`             | —        | Edit metadata (name/description/tags); tree untouched                                    |
+| `patch_virtual_user`              | —        | Edit the action tree via RFC 6902 JSON Patch                                             |
+| `delete_virtual_user`             | —        | **Destructive** — drops the tree                                                         |
 
-- `fileContent` (Base64 inline) is bounded by the tool-call token budget.
-  In practice ~500 KB raw content; above that, Claude's context fills up
-  and the tool call fails before reaching the server.
-- `fileUrl` is bounded server-side by `mcp.file-source.max-bytes`
-  (256 MB default). The URL must be reachable from the MCP server (S3
-  presigned link, GitHub raw, gist, internal HTTP …).
-- **When the file is too large for both paths** (e.g. a multi-hundred-MB
-  HAR capture from a long browse session, or the user has no place to
-  host it publicly), don't fail the task: tell the user to upload the
-  file manually through the OctoPerf web UI. Discover the project URL
-  via `list_projects_by_workspace` and point them at it — the UI's
-  import / files pages do the same upload server-side.
+#### When the upload is too big
+
+Presigned uploads stream the bytes directly to the OctoPerf REST host
+in a single `multipart/form-data` POST — they are bounded only by the
+backend's own request-size limit, not by the MCP tool-call token budget.
+If a client environment still can't perform the POST (no network access,
+sandbox restrictions, file too big for the backend, …), don't fail the
+task: tell the user to upload the file manually through the OctoPerf
+web UI. Discover the project URL via `list_projects_by_workspace` and
+point them at it — the UI's import / files pages do the same upload
+server-side.
 
 ### Variables (parameterization)
 
