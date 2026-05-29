@@ -30,16 +30,16 @@ classify.
 
 OctoPerf's "KO" rule isn't just "non-2XX". A sample is KO when:
 
-| Live response code | Recorded response code | Result                                                          |
-|--------------------|------------------------|-----------------------------------------------------------------|
-| 2XX                | none                   | ✅ OK                                                            |
-| 2XX                | 2XX                    | ✅ OK                                                            |
+| Live response code | Recorded response code | Result                                                           |
+|--------------------|------------------------|------------------------------------------------------------------|
+| 2XX                | none                   | ✅ OK                                                             |
+| 2XX                | 2XX                    | ✅ OK                                                             |
 | 2XX                | 3XX                    | ❌ KO (recording expected a redirect, got a body — usually wrong) |
-| 3XX                | 3XX                    | ✅ OK                                                            |
+| 3XX                | 3XX                    | ✅ OK                                                             |
 | 3XX                | 2XX                    | ❌ KO (recording expected a body, got a redirect)                 |
-| Any 4XX / 5XX      | anything               | ❌ KO                                                            |
-| Unknown code       | anything               | ❌ KO                                                            |
-| Any code           | 4XX / 5XX / unknown    | ❌ KO (recording was already broken; re-record)                  |
+| Any 4XX / 5XX      | anything               | ❌ KO                                                             |
+| Unknown code       | anything               | ❌ KO                                                             |
+| Any code           | 4XX / 5XX / unknown    | ❌ KO (recording was already broken; re-record)                   |
 
 This matters when classifying: a "successful" 200 against a recorded 302 is a
 real bug, not a false positive — the VU is hitting a different code path than
@@ -83,15 +83,15 @@ debugging CSV-driven flakiness so you see the bad row, not a good one.
 Bucket the failing actions into a small number of categories. The
 common ones:
 
-| Category                  | Index signal                                                                 | Likely fix                                                    |
-|---------------------------|------------------------------------------------------------------------------|---------------------------------------------------------------|
-| **Auth / state**          | 401, 403; "invalid token", "expired", "CSRF"                                 | Auto-correlation (separate skill)                             |
-| **Variable / data**       | 400 with body validation errors; "field required", "invalid format"          | Edit / create variables; check CSV upload                     |
-| **HTTP server config**    | Connection timeout, DNS failure, SSL handshake error, wrong port             | `update_http_server` (baseUrl, timeouts, IP spoofing)         |
-| **Server-side 5xx**       | 500, 502, 503, 504                                                           | Not the VU's fault — surface to user; check target env        |
-| **Body mismatch**         | 422; "schema mismatch", "unexpected field"                                   | Re-import (recording out of date) or edit action body         |
+| Category                  | Index signal                                                                                                                                      | Likely fix                                                                                                                                                                              |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Auth / state**          | 401, 403; "invalid token", "expired", "CSRF"                                                                                                      | Auto-correlation (separate skill)                                                                                                                                                       |
+| **Variable / data**       | 400 with body validation errors; "field required", "invalid format"                                                                               | Edit / create variables; check CSV upload                                                                                                                                               |
+| **HTTP server config**    | Connection timeout, DNS failure, SSL handshake error, wrong port                                                                                  | `update_http_server` (baseUrl, timeouts, IP spoofing)                                                                                                                                   |
+| **Server-side 5xx**       | 500, 502, 503, 504                                                                                                                                | Not the VU's fault — surface to user; check target env                                                                                                                                  |
+| **Body mismatch**         | 422; "schema mismatch", "unexpected field"                                                                                                        | Re-import (recording out of date) or edit action body                                                                                                                                   |
 | **Assertion failure**     | Status 2XX/3XX matching recorded, but failure message quotes the assertion's pattern (often on a `ResponseAssertion` node attached to the action) | Read `validationResponse.body` to see the matched substring/regex. Either the response is genuinely wrong (fix the upstream cause) or the assertion's pattern is too strict (loosen it) |
-| **Missing dependency**    | 404 on resources, signed URLs returning errors                               | Run a correlation rule, or the resource genuinely doesn't exist |
+| **Missing dependency**    | 404 on resources, signed URLs returning errors                                                                                                    | Run a correlation rule, or the resource genuinely doesn't exist                                                                                                                         |
 
 A useful heuristic: if 80% of failures fall in one category, fix that
 first and re-validate before investigating the rest. Most of the long
@@ -192,23 +192,23 @@ Stop and surface to the user when:
 a flat list of `(level, message)`. ERROR entries block validation, WARNING /
 INFO entries don't. Mapping the canonical messages to fixes:
 
-| Level    | Message                                       | What it means                                              | Fix                                                                            |
-|----------|-----------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------|
-| ERROR    | A file is missing for CSV variable            | A CSVVariable points at a file not uploaded                | `upload_project_file`, or `patch_virtual_user` to repoint the variable         |
-| ERROR    | CSVVariable has conflicting column names      | Two CSVVariables share a column name                       | Prefix one variable's columns; `patch_virtual_user`                            |
-| ERROR    | JSR223Action is empty                         | Empty script generates only noise logs                     | Delete the action or fill the script (`patch_virtual_user`)                    |
-| ERROR    | No Server Found                               | A request points at a deleted HTTP server                  | `list_http_servers_by_project` → recreate or repoint via `update_http_server`  |
-| ERROR    | Cyclic Dependency Detected!                   | A fragment references itself (directly or indirectly)      | Break the cycle with `patch_virtual_user`                                      |
-| WARNING  | Clear Cookies before recording …              | Recorded cookies may leak invalid session ids              | Remove `Cookie` headers in the relevant requests                                |
-| WARNING  | Empty file for CSVVariable                    | The uploaded CSV parsed to zero rows                       | Re-upload a properly-encoded UTF-8 file                                         |
-| WARNING  | End Of Value Policy is 'Stop VU'              | Test will end abruptly when the CSV is exhausted           | Confirm with user; otherwise switch policy to Recycle / Continue               |
-| WARNING  | file is missing for POST request              | A multipart POST references a file not in `/resources`     | `upload_project_file` (no path prefix; OctoPerf adds `/resources/` itself)     |
-| INFO     | Host header and server host are differing     | Some servers reject mismatched Host headers                | Search-and-replace the Host header if the target rejects                       |
-| INFO     | Using a JMeter generic action                 | Imported a raw JMeter element; double-check its config     | None unless behavior is unexpected — JAR plugins go under `/lib/ext`            |
-| INFO     | XXX sec thinktime is high                     | A recorded pause is unusually long                         | Trim the thinktime if the duration would harm the test                          |
-| INFO     | xxxxx should have a name                      | Unnamed element renders as "Unnamed" in reports            | Rename via `patch_virtual_user`                                                |
-| INFO     | xxxxx is empty                                | Empty controller / logic action that won't execute         | Delete it                                                                       |
-| INFO     | HTTP Action has empty query parameter         | Imported a stray query param with no name / value          | Remove the parameter via `patch_virtual_user`                                  |
+| Level   | Message                                   | What it means                                          | Fix                                                                           |
+|---------|-------------------------------------------|--------------------------------------------------------|-------------------------------------------------------------------------------|
+| ERROR   | A file is missing for CSV variable        | A CSVVariable points at a file not uploaded            | `upload_project_file`, or `patch_virtual_user` to repoint the variable        |
+| ERROR   | CSVVariable has conflicting column names  | Two CSVVariables share a column name                   | Prefix one variable's columns; `patch_virtual_user`                           |
+| ERROR   | JSR223Action is empty                     | Empty script generates only noise logs                 | Delete the action or fill the script (`patch_virtual_user`)                   |
+| ERROR   | No Server Found                           | A request points at a deleted HTTP server              | `list_http_servers_by_project` → recreate or repoint via `update_http_server` |
+| ERROR   | Cyclic Dependency Detected!               | A fragment references itself (directly or indirectly)  | Break the cycle with `patch_virtual_user`                                     |
+| WARNING | Clear Cookies before recording …          | Recorded cookies may leak invalid session ids          | Remove `Cookie` headers in the relevant requests                              |
+| WARNING | Empty file for CSVVariable                | The uploaded CSV parsed to zero rows                   | Re-upload a properly-encoded UTF-8 file                                       |
+| WARNING | End Of Value Policy is 'Stop VU'          | Test will end abruptly when the CSV is exhausted       | Confirm with user; otherwise switch policy to Recycle / Continue              |
+| WARNING | file is missing for POST request          | A multipart POST references a file not in `/resources` | `upload_project_file` (no path prefix; OctoPerf adds `/resources/` itself)    |
+| INFO    | Host header and server host are differing | Some servers reject mismatched Host headers            | Search-and-replace the Host header if the target rejects                      |
+| INFO    | Using a JMeter generic action             | Imported a raw JMeter element; double-check its config | None unless behavior is unexpected — JAR plugins go under `/lib/ext`          |
+| INFO    | XXX sec thinktime is high                 | A recorded pause is unusually long                     | Trim the thinktime if the duration would harm the test                        |
+| INFO    | xxxxx should have a name                  | Unnamed element renders as "Unnamed" in reports        | Rename via `patch_virtual_user`                                               |
+| INFO    | xxxxx is empty                            | Empty controller / logic action that won't execute     | Delete it                                                                     |
+| INFO    | HTTP Action has empty query parameter     | Imported a stray query param with no name / value      | Remove the parameter via `patch_virtual_user`                                 |
 
 Apply the ERROR fixes first — validation is blocked until those clear.
 

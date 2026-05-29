@@ -189,13 +189,13 @@ Rule design tips:
 **Picking `injectionTargets`** — match each *target* (where the
 captured value should reappear in subsequent requests) to one of:
 
-| Where the value appears next                | `injectionTargets`                       |
-|---------------------------------------------|------------------------------------------|
-| Hidden form input on HTML POST              | `POST_PARAM`                             |
-| Header value (`Authorization: Bearer`, `X-CSRF-Token`) | `HEADER`                      |
-| URL path segment (`;jsessionid=...`, REST id) | `PATH` (+ `HEADER` if also in Cookie)  |
-| Query string (signed URL, `?state=...`)     | `QUERY_PARAM`                            |
-| Body of JSON / XML request                  | `BODY`                                   |
+| Where the value appears next                           | `injectionTargets`                    |
+|--------------------------------------------------------|---------------------------------------|
+| Hidden form input on HTML POST                         | `POST_PARAM`                          |
+| Header value (`Authorization: Bearer`, `X-CSRF-Token`) | `HEADER`                              |
+| URL path segment (`;jsessionid=...`, REST id)          | `PATH` (+ `HEADER` if also in Cookie) |
+| Query string (signed URL, `?state=...`)     c          | `QUERY_PARAM`                         |
+| Body of JSON / XML request                             | `BODY`                                |
 
 Multiple targets are valid: a JSESSIONID that's URL-rewritten **and**
 echoed in `Referer` headers needs `["PATH", "HEADER"]`.

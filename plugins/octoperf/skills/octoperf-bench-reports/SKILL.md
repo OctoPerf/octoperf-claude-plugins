@@ -41,28 +41,28 @@ then dispatch on each `items[i]["@type"]` per the table below.
 
 For every widget type that's reachable from MCP:
 
-| `@type`                              | Tool                                  | Returns                                                                 |
-|--------------------------------------|---------------------------------------|-------------------------------------------------------------------------|
-| `SummaryReportItem`                  | `get_report_summary_values`           | `List<Double>` aligned with `item.metrics[i].id`                        |
-| `BarChartReportItem`                 | `get_report_summary_values` *(same shape as Summary)* | `List<Double>` aligned with `item.metrics[i].id`        |
-| `StatisticTableReportItem`           | `get_report_table_values`             | `List<TableEntry>` (`actionId` → `values`)                              |
-| `StatisticTreeReportItem`            | `get_report_tree_values`              | `List<TreeEntry>` (`virtualUserId` + `actionId` → `values`) — per-VU split |
-| `TopReportItem`                      | `get_report_top_values`               | `TopResult` (top-N actionIds + per-action curve)                        |
-| `PieChartReportItem`                 | `get_report_pie_values`               | `List<Map<String, Long>>` (one map per benchResult, label → count)      |
-| `LineChartReportItem`                | `get_report_line_chart_values`        | `List<List<GraphPoint>>` (one series per metric, `(x=epoch-ms, y)`)     |
-| `PercentilesChartReportItem`         | `get_report_line_chart_values`        | Same shape — percentile curve                                           |
-| `StackedChartReportItem`             | `get_report_stacked_chart_values`     | `List<MapGraphPoint>` (`x` + per-series map)                            |
-| `AreaRangeChartReportItem`           | `get_report_area_range_values`        | `AreaRangeResult` (`curve` vs `reference`, `rmse`)                      |
-| `InsightsReportItem`                 | `get_report_insights`                 | `Set<Insight>` (severity + value + drill-in widget)                     |
-| `ErrorsReportItem`                   | `get_report_errors`                   | `List<BenchError>` (per-sample failures)                                |
-| `ThresholdAlarmReportItem`           | `get_report_threshold_alarms`         | `List<ThresholdAlarm>` (per-breach)                                     |
-| `TextualMonitorReportItem`           | `get_report_textual_monitors`         | `List<TextualCounterValue>` (string-valued monitor samples)             |
-| `LoadGeneratorsChartReportItem`      | `list_bench_load_generators`          | `List<BenchLoadGenerator>` — chart is derived from this                 |
-| `LoadGeneratorsTreeReportItem`       | `list_bench_load_generators`          | Same source as the chart — tree is just a different rendering           |
-| `TextReportItem`                     | *(no tool — descriptive markdown)*    | n/a — `item.description` carries the markdown                           |
-| `SynopsisReportItem`                 | *(no tool — scenario metadata)*       | n/a — render the synopsis section in the UI for the user                |
-| `TrendConfigReportItem`              | *(no tool — read `configs`)*          | n/a — the selectors live in the report's `TrendReportConfig`            |
-| `MonitorsTableReportItem`            | **❌ no MCP tool**                    | UI only — list of monitor connections with threshold-alarm counts       |
+| `@type`                              | Tool                                                  | Returns                                                                    |
+|--------------------------------------|-------------------------------------------------------|----------------------------------------------------------------------------|
+| `SummaryReportItem`                  | `get_report_summary_values`                           | `List<Double>` aligned with `item.metrics[i].id`                           |
+| `BarChartReportItem`                 | `get_report_summary_values` *(same shape as Summary)* | `List<Double>` aligned with `item.metrics[i].id`                           |
+| `StatisticTableReportItem`           | `get_report_table_values`                             | `List<TableEntry>` (`actionId` → `values`)                                 |
+| `StatisticTreeReportItem`            | `get_report_tree_values`                              | `List<TreeEntry>` (`virtualUserId` + `actionId` → `values`) — per-VU split |
+| `TopReportItem`                      | `get_report_top_values`                               | `TopResult` (top-N actionIds + per-action curve)                           |
+| `PieChartReportItem`                 | `get_report_pie_values`                               | `List<Map<String, Long>>` (one map per benchResult, label → count)         |
+| `LineChartReportItem`                | `get_report_line_chart_values`                        | `List<List<GraphPoint>>` (one series per metric, `(x=epoch-ms, y)`)        |
+| `PercentilesChartReportItem`         | `get_report_line_chart_values`                        | Same shape — percentile curve                                              |
+| `StackedChartReportItem`             | `get_report_stacked_chart_values`                     | `List<MapGraphPoint>` (`x` + per-series map)                               |
+| `AreaRangeChartReportItem`           | `get_report_area_range_values`                        | `AreaRangeResult` (`curve` vs `reference`, `rmse`)                         |
+| `InsightsReportItem`                 | `get_report_insights`                                 | `Set<Insight>` (severity + value + drill-in widget)                        |
+| `ErrorsReportItem`                   | `get_report_errors`                                   | `List<BenchError>` (per-sample failures)                                   |
+| `ThresholdAlarmReportItem`           | `get_report_threshold_alarms`                         | `List<ThresholdAlarm>` (per-breach)                                        |
+| `TextualMonitorReportItem`           | `get_report_textual_monitors`                         | `List<TextualCounterValue>` (string-valued monitor samples)                |
+| `LoadGeneratorsChartReportItem`      | `list_bench_load_generators`                          | `List<BenchLoadGenerator>` — chart is derived from this                    |
+| `LoadGeneratorsTreeReportItem`       | `list_bench_load_generators`                          | Same source as the chart — tree is just a different rendering              |
+| `TextReportItem`                     | *(no tool — descriptive markdown)*                    | n/a — `item.description` carries the markdown                              |
+| `SynopsisReportItem`                 | *(no tool — scenario metadata)*                       | n/a — render the synopsis section in the UI for the user                   |
+| `TrendConfigReportItem`              | *(no tool — read `configs`)*                          | n/a — the selectors live in the report's `TrendReportConfig`               |
+| `MonitorsTableReportItem`            | **❌ no MCP tool**                                     | UI only — list of monitor connections with threshold-alarm counts          |
 
 Two follow-up tools to keep in mind:
 
@@ -118,7 +118,7 @@ The same VU can emit many row types in `get_report_tree_values`,
 keyed by `actionId` with a JSON-encoded suffix:
 
 | `type` (in the label suffix) | What it measures                                           |
-|------------------------------|-----------------------------------------------------------|
+|------------------------------|------------------------------------------------------------|
 | (bare actionId, no suffix)   | Wall-clock per spec iteration — source of truth for UX     |
 | `GROUP` (`label="Actions"`)  | Sum of all `ACTION` durations                              |
 | `GROUP` (`label="Network"`)  | Cumulative time in HTTP requests per iteration             |

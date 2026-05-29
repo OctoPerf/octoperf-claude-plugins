@@ -35,10 +35,9 @@ For everything else, register the MCP endpoint manually:
 | MCP Inspector          | `npx @modelcontextprotocol/inspector https://api.octoperf.com/mcp` (Streamable HTTP)                   |
 
 For self-hosted Enterprise, swap the host for your instance (e.g.
-`https://octoperf.example.com/mcp`). For local development, point at
-`http://localhost:8091/mcp`.
+`https://octoperf.example.com/mcp`).
 
-Revoke at any time from **Account → Connected applications** on OctoPerf.
+Revoke at any time from **Account → Connected applications** on OctoPerf UI.
 
 ### Claude.ai web: allow the OctoPerf host for presigned URLs
 
@@ -62,15 +61,6 @@ action required.
 This limitation only applies to the Claude.ai web (and Desktop)
 clients. Claude Code CLI, Cursor, Continue.dev and MCP Inspector
 execute the fetch themselves and are not gated by this allowlist.
-
-We intentionally do **not** offer a base64 / inline fallback for these
-tools: the MCP tool-call payload is bounded by the model's token
-budget (~500 KB raw), which would break legitimate large-file flows
-(Playwright `trace.zip`, multi-hundred-MB HAR captures, full JTL logs,
-PDF reports). Maintaining two parallel toolsets would also double the
-schema surface. The structural fix has to come from the MCP client
-honouring server-declared trusted domains — tracked upstream at
-<https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1541>.
 
 ## Tool catalogue
 
@@ -183,63 +173,64 @@ server-side.
 
 ### Correlation (dynamic-value extraction)
 
-| Tool                                  | Purpose                                                                 |
-|---------------------------------------|-------------------------------------------------------------------------|
-| `list_correlation_frameworks`         | Built-in presets (SAML, OAuth, .NET, Java, Token, AzureAD, …)           |
-| `add_correlation_framework_to_project`         | Apply a preset to a VU                                                  |
-| `list_correlation_rules`              | Project-defined regex rules                                             |
-| `create_correlation_rule`             | New regex rule                                                          |
-| `delete_correlation_rule`             | **Destructive**                                                         |
-| `apply_correlations_to_virtual_user`  | Async re-walk the VU and rewrite extractors/usages — returns a task id  |
+| Tool                                   | Purpose                                                                |
+|----------------------------------------|------------------------------------------------------------------------|
+| `list_correlation_frameworks`          | Built-in presets (SAML, OAuth, .NET, Java, Token, AzureAD, …)          |
+| `add_correlation_framework_to_project` | Apply a preset to a VU                                                 |
+| `list_correlation_rules`               | Project-defined regex rules                                            |
+| `create_correlation_rule`              | New regex rule                                                         |
+| `delete_correlation_rule`              | **Destructive**                                                        |
+| `apply_correlations_to_virtual_user`   | Async re-walk the VU and rewrite extractors/usages — returns a task id |
 
 ### Runtime — scenarios
 
-| Tool                          | Purpose                                                                                          |
-|-------------------------------|--------------------------------------------------------------------------------------------------|
-| `create_scenario_ramp_up`         | Scenario with ramp-up + hold load (VUs + provider + one-or-more regions round-robin)                |
-| `create_scenario_ramp_up_down`    | Scenario with ramp-up + plateau + ramp-down (for soak tests with controlled wind-down)              |
-| `create_scenario_stairs`          | Scenario with ascending stairs (N discrete steps to target users — for capacity-finding tests)      |
-| `get_scenario`                | Full Scenario (metadata + userProfiles with load shapes + engine settings)                       |
-| `update_scenario`             | Edit metadata (name/description/tags); userProfiles untouched                                    |
-| `patch_scenario`              | Edit the full scenario via RFC 6902 JSON Patch                                                   |
-| `delete_scenario`             | **Destructive** — drops the scenario configuration                                               |
-| `schedule_scenario_once`      | **Destructive (credits on fire)** — schedule a one-shot scenario run at a given ISO-8601 datetime |
-| `schedule_scenario_cron`      | **Destructive (credits on each fire)** — schedule recurring runs from a Unix 5-field cron expression evaluated in UTC (NOT Quartz / no seconds) |
-| `list_scheduled_jobs_by_project` | List all scheduled jobs of a project — id, scenarioId, name, trigger description, enabled flag, nextRun |
-| `enable_scheduled_job`        | Re-arm a paused job (**re-arms a destructive action**)                                            |
-| `disable_scheduled_job`       | Pause a job without deleting — re-enable later via `enable_scheduled_job`                         |
-| `delete_scheduled_job`        | **Destructive** — drop the schedule entry (past runs stay in history). Prefer `disable_scheduled_job` for a reversible pause |
+| Tool                             | Purpose                                                                                                                                         |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `create_scenario_ramp_up`        | Scenario with ramp-up + hold load (VUs + provider + one-or-more regions round-robin)                                                            |
+| `create_scenario_ramp_up_down`   | Scenario with ramp-up + plateau + ramp-down (for soak tests with controlled wind-down)                                                          |
+| `create_scenario_stairs`         | Scenario with ascending stairs (N discrete steps to target users — for capacity-finding tests)                                                  |
+| `get_scenario`                   | Full Scenario (metadata + userProfiles with load shapes + engine settings)                                                                      |
+| `update_scenario`                | Edit metadata (name/description/tags); userProfiles untouched                                                                                   |
+| `patch_scenario`                 | Edit the full scenario via RFC 6902 JSON Patch                                                                                                  |
+| `delete_scenario`                | **Destructive** — drops the scenario configuration                                                                                              |
+| `schedule_scenario_once`         | **Destructive (credits on fire)** — schedule a one-shot scenario run at a given ISO-8601 datetime                                               |
+| `schedule_scenario_cron`         | **Destructive (credits on each fire)** — schedule recurring runs from a Unix 5-field cron expression evaluated in UTC (NOT Quartz / no seconds) |
+| `list_scheduled_jobs_by_project` | List all scheduled jobs of a project — id, scenarioId, name, trigger description, enabled flag, nextRun                                         |
+| `enable_scheduled_job`           | Re-arm a paused job (**re-arms a destructive action**)                                                                                          |
+| `disable_scheduled_job`          | Pause a job without deleting — re-enable later via `enable_scheduled_job`                                                                       |
+| `delete_scheduled_job`           | **Destructive** — drop the schedule entry (past runs stay in history). Prefer `disable_scheduled_job` for a reversible pause                    |
 
 **Load-shape vocabulary** — when the user describes a load using OctoPerf's UI terms, map to:
 
-| UI term                 | Shape                                | Tool                            |
-|-------------------------|--------------------------------------|---------------------------------|
-| **Smooth**              | ramp-up → plateau → ramp-down         | `create_scenario_ramp_up_down`  |
-| **Sustained**           | ramp-up → plateau (no ramp-down)      | `create_scenario_ramp_up`       |
-| **Stress**              | N discrete steps up to peak           | `create_scenario_stairs`        |
-| **Custom** (point-by-point) | arbitrary inflection points          | `patch_scenario` against `userProfiles[i].load`  |
+| UI term                     | Shape                             | Tool                                            |
+|-----------------------------|-----------------------------------|-------------------------------------------------|
+| **Smooth**                  | ramp-up → plateau → ramp-down     | `create_scenario_ramp_up_down`                  |
+| **Sustained**               | ramp-up → plateau (no ramp-down)  | `create_scenario_ramp_up`                       |
+| **Stress**                  | N discrete steps up to peak       | `create_scenario_stairs`                        |
+| **Custom** (point-by-point) | arbitrary inflection points       | `patch_scenario` against `userProfiles[i].load` |
 
 WebDriver-based virtual users are **capped at 1 concurrent user per UserProfile** in the engine (real-browser CPU contention). Don't propose a ramp to N users on a WEB_DRIVER VU — split across N UserProfiles instead.
+Profer Playwright-based virtual users over WebDriver-based virtual users.
 
 ### Runtime — validate & run
 
-| Tool                          | Purpose                                                                                          |
-|-------------------------------|--------------------------------------------------------------------------------------------------|
-| `validate_virtual_user`       | Starts a functional check (1 user, N iterations). Returns `(benchResultId, state)`. Light cost.  |
-| `get_scenario_matching_plans` | **PRE-FLIGHT** — list the account's subscriptions / plans that can host the scenario, with per-plan caps (concurrency, real-browser, duration) and the actual VU count each plan would allocate. Call before `run_scenario` to avoid burning credits on an under-sized plan. |
+| Tool                          | Purpose                                                                                                                                                                                                                                                                                                                                               |
+|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `validate_virtual_user`       | Starts a functional check (1 user, N iterations). Returns `(benchResultId, state)`. Light cost.                                                                                                                                                                                                                                                       |
+| `get_scenario_matching_plans` | **PRE-FLIGHT** — list the account's subscriptions / plans that can host the scenario, with per-plan caps (concurrency, real-browser, duration) and the actual VU count each plan would allocate. Call before `run_scenario` to avoid burning credits on an under-sized plan.                                                                          |
 | `list_active_subscriptions`   | Account-level inspection: every usable subscription on the account (status `active` / `trialing` / `cancel_at_period_end`) with full plan caps (maxConcurrentUsers, maxRealBrowserUsers, maxProfilesPerScenario, maxTestDurationSec, remainingTests). Use when `get_scenario_matching_plans` returned empty to explain which cap blocks the scenario. |
-| `run_scenario`                | **Destructive (credits)** — starts a real load test. Returns the bench result id.                |
-| `get_bench_status`            | Progress `[0.0, 1.0]` for a running test                                                         |
+| `run_scenario`                | **Destructive (credits)** — starts a real load test. Returns the bench result id.                                                                                                                                                                                                                                                                     |
+| `get_bench_status`            | Progress `[0.0, 1.0]` for a running test                                                                                                                                                                                                                                                                                                              |
 
 ### Runtime — bench results
 
-| Tool                                  | Purpose                                                                                          |
-|---------------------------------------|--------------------------------------------------------------------------------------------------|
-| `get_bench_result`                    | Full bench result entity (canonical state lookup — CREATED/PENDING/…/RUNNING/FINISHED/ABORTED/ERROR) |
-| `stop_bench_result`                   | **Destructive** — aborts a running bench (terminal state = ABORTED)                              |
-| `list_bench_docker_logs`              | Docker container logs of the bench launch (same panel the web UI streams) — diagnose ERROR / stuck PREPARING / INITIALIZING runs |
-| `list_bench_result_files`             | JMeter logs + JTL / HAR / screenshots / attachments stored against a benchResultId (also covers validation runs) |
-| `read_bench_result_file_lines`        | Read a contiguous range of lines from one of those files (gzip-transparent; binary files return garbage) |
+| Tool                                  | Purpose                                                                                                                                                                                               |
+|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `get_bench_result`                    | Full bench result entity (canonical state lookup — CREATED/PENDING/…/RUNNING/FINISHED/ABORTED/ERROR)                                                                                                  |
+| `stop_bench_result`                   | **Destructive** — aborts a running bench (terminal state = ABORTED)                                                                                                                                   |
+| `list_bench_docker_logs`              | Docker container logs of the bench launch (same panel the web UI streams) — diagnose ERROR / stuck PREPARING / INITIALIZING runs                                                                      |
+| `list_bench_result_files`             | JMeter logs + JTL / HAR / screenshots / attachments stored against a benchResultId (also covers validation runs)                                                                                      |
+| `read_bench_result_file_lines`        | Read a contiguous range of lines from one of those files (gzip-transparent; binary files return garbage)                                                                                              |
 | `download_bench_result_file`          | Mint a presigned GET URL (single-use, ~5 min) to pull one bench-result file directly — Playwright `trace.zip`, screenshots (`.png`), HAR archives, any binary artefact the line reader can't surface. |
 
 **Bench-result state machine** — drives when log files / report metrics become available:
@@ -257,37 +248,37 @@ CREATED → PENDING → SCALING → PREPARING → INITIALIZING ─┬─→ ERRO
 
 ### Analysis — bench reports
 
-| Tool                              | Purpose                                                                                          |
-|-----------------------------------|--------------------------------------------------------------------------------------------------|
-| `list_bench_reports_by_project`   | Every report of a project (metadata + url) — start here to find reportIds                         |
-| `get_bench_report`                | Full report — polymorphic `items` (charts / tables / top / summary / …) + per-benchResult configs |
-| `update_bench_report`             | Partial metadata edit — name / description / tags (items + configs untouched)                     |
-| `patch_bench_report`              | RFC 6902 JSON Patch over the full BenchReport entity (use `octoperf://schema/bench-report`)       |
-| `delete_bench_report`             | **Destructive** — drops the report, leaves benchResults intact                                   |
-| `create_trend_report_by_tags`             | TREND report anchored on one benchResult, other points picked by tag intersection on bench results |
-| `create_trend_report_by_name`             | TREND report anchored on one benchResult, other points picked by scenario-name match (EQUALS / CONTAINS / STARTS_WITH / ENDS_WITH, case-sensitive or not) |
-| `create_trend_report_by_creation_date`    | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                       |
-| `export_bench_report_pdf`         | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
+| Tool                                   | Purpose                                                                                                                                                                                                                                                                         |
+|----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `list_bench_reports_by_project`        | Every report of a project (metadata + url) — start here to find reportIds                                                                                                                                                                                                       |
+| `get_bench_report`                     | Full report — polymorphic `items` (charts / tables / top / summary / …) + per-benchResult configs                                                                                                                                                                               |
+| `update_bench_report`                  | Partial metadata edit — name / description / tags (items + configs untouched)                                                                                                                                                                                                   |
+| `patch_bench_report`                   | RFC 6902 JSON Patch over the full BenchReport entity (use `octoperf://schema/bench-report`)                                                                                                                                                                                     |
+| `delete_bench_report`                  | **Destructive** — drops the report, leaves benchResults intact                                                                                                                                                                                                                  |
+| `create_trend_report_by_tags`          | TREND report anchored on one benchResult, other points picked by tag intersection on bench results                                                                                                                                                                              |
+| `create_trend_report_by_name`          | TREND report anchored on one benchResult, other points picked by scenario-name match (EQUALS / CONTAINS / STARTS_WITH / ENDS_WITH, case-sensitive or not)                                                                                                                       |
+| `create_trend_report_by_creation_date` | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                                                                                                                                              |
+| `export_bench_report_pdf`              | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
 
 ### Analysis — report item values
 
 After `get_bench_report`, dispatch by the item's `@type` to read its aggregated values:
 
-| Tool                                 | For item `@type`                                                  | Returns                          |
-|--------------------------------------|-------------------------------------------------------------------|----------------------------------|
-| `get_report_table_values`            | `StatisticTableReportItem`                                        | `List<TableEntry>`               |
-| `get_report_tree_values`             | `StatisticTreeReportItem` (per-VU breakdown for hybrid scenarios) | `List<TreeEntry>`                |
-| `get_report_top_values`              | `TopReportItem` (with optional from/to window)                    | `TopResult`                      |
-| `get_report_pie_values`              | `PieChartReportItem`                                              | `List<Map<String, Long>>`        |
-| `get_report_line_chart_values`       | `LineChartReportItem` / `PercentilesChartReportItem` (with from/to) | `List<List<GraphPoint>>`         |
-| `get_report_stacked_chart_values`    | `StackedChartReportItem`                                          | `List<MapGraphPoint>`            |
-| `get_report_area_range_values`       | `AreaRangeChartReportItem`                                        | `AreaRangeResult` (curve + ref + rmse) |
-| `get_report_summary_values`          | `SummaryReportItem` / `BarChartReportItem` (with optional from/to) | `List<Double>` aligned with `item.metrics` |
-| `get_report_insights`                | `InsightsReportItem` (with optional from/to window)               | `Set<Insight>` (id + level + value + drill-in widgets) |
-| `get_report_errors`                  | `ErrorsReportItem` (with optional from/to window)                 | `List<BenchError>` (per-sample failures) |
-| `fetch_bench_error_http`             | One `BenchError` (`benchResultId` + `actionId` + `timestamp`)     | `(HttpRequestEntity, HttpResponseEntity)` of the failing sample |
-| `get_report_threshold_alarms`        | `ThresholdAlarmReportItem` (with optional from/to window)         | `List<ThresholdAlarm>` (per-breach: severity, threshold, observed) |
-| `get_report_textual_monitors`        | `TextualMonitorReportItem`                                        | `List<TextualCounterValue>` (string-valued monitor samples)       |
+| Tool                                 | For item `@type`                                                                              | Returns                                                                              |
+|--------------------------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `get_report_table_values`            | `StatisticTableReportItem`                                                                    | `List<TableEntry>`                                                                   |
+| `get_report_tree_values`             | `StatisticTreeReportItem` (per-VU breakdown for hybrid scenarios)                             | `List<TreeEntry>`                                                                    |
+| `get_report_top_values`              | `TopReportItem` (with optional from/to window)                                                | `TopResult`                                                                          |
+| `get_report_pie_values`              | `PieChartReportItem`                                                                          | `List<Map<String, Long>>`                                                            |
+| `get_report_line_chart_values`       | `LineChartReportItem` / `PercentilesChartReportItem` (with from/to)                           | `List<List<GraphPoint>>`                                                             |
+| `get_report_stacked_chart_values`    | `StackedChartReportItem`                                                                      | `List<MapGraphPoint>`                                                                |
+| `get_report_area_range_values`       | `AreaRangeChartReportItem`                                                                    | `AreaRangeResult` (curve + ref + rmse)                                               |
+| `get_report_summary_values`          | `SummaryReportItem` / `BarChartReportItem` (with optional from/to)                            | `List<Double>` aligned with `item.metrics`                                           |
+| `get_report_insights`                | `InsightsReportItem` (with optional from/to window)                                           | `Set<Insight>` (id + level + value + drill-in widgets)                               |
+| `get_report_errors`                  | `ErrorsReportItem` (with optional from/to window)                                             | `List<BenchError>` (per-sample failures)                                             |
+| `fetch_bench_error_http`             | One `BenchError` (`benchResultId` + `actionId` + `timestamp`)                                 | `(HttpRequestEntity, HttpResponseEntity)` of the failing sample                      |
+| `get_report_threshold_alarms`        | `ThresholdAlarmReportItem` (with optional from/to window)                                     | `List<ThresholdAlarm>` (per-breach: severity, threshold, observed)                   |
+| `get_report_textual_monitors`        | `TextualMonitorReportItem`                                                                    | `List<TextualCounterValue>` (string-valued monitor samples)                          |
 | `list_bench_load_generators`         | `LoadGeneratorsChartReportItem` / `LoadGeneratorsTreeReportItem` — both pull from same source | `List<BenchLoadGenerator>` (one per LG container: region, host, VU count, start/end) |
 
 **Metric name semantics** — when reading widget metrics from any
@@ -313,8 +304,8 @@ file (so an agent can drop it at the user's project root).
 
 ### Templates
 
-| URI                                | Mime               | Purpose                                                                                                |
-|------------------------------------|--------------------|--------------------------------------------------------------------------------------------------------|
+| URI                                | Mime               | Purpose                                                                                                 |
+|------------------------------------|--------------------|---------------------------------------------------------------------------------------------------------|
 | `octoperf://templates/agents-md`   | `text/markdown`    | This `AGENTS.md` — drop it at the user's project root to brief any CLI agent on how to drive the server |
 
 ### Skills (playbooks)
@@ -323,15 +314,15 @@ Read these as a system / context message before tackling the matching
 workflow — they carry the failure catalogues and classification tables
 that the workflow TL;DRs omit.
 
-| URI                                            | Mime            | Purpose                                                                                          |
-|------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------------|
-| `octoperf://skills/auto-correlation`           | `text/markdown` | Playbook: fix a VU whose validation fails on dynamic values (CSRF tokens, sessions, signed URLs) |
-| `octoperf://skills/validation-triage`          | `text/markdown` | Playbook: triage a VU with many validation failures, group by root cause, fix one per group     |
-| `octoperf://skills/scenario-diagnosis`         | `text/markdown` | Playbook: investigate a poor / failing scenario run (global metrics → drill-in → verdict)        |
-| `octoperf://skills/bench-reports`              | `text/markdown` | Reading guide: widget-by-widget mapping to the right `get_report_*_values` tool, semantic gotchas (Hits vs CONTAINER, trend report DELTA, Playwright row types) |
-| `octoperf://skills/real-browser-probe`         | `text/markdown` | Playbook: compose a hybrid scenario (N×JMeter for load + 1×Playwright probe) for user-perceived metrics during a bench |
-| `octoperf://skills/scheduling`                 | `text/markdown` | Playbook: schedule a scenario one-shot or cron — Unix 5-field UTC format (NOT Quartz), timezone conversion, pause/resume/delete lifecycle |
-| `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult) |
+| URI                                            | Mime            | Purpose                                                                                                                                                                                                                                          |
+|------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `octoperf://skills/auto-correlation`           | `text/markdown` | Playbook: fix a VU whose validation fails on dynamic values (CSRF tokens, sessions, signed URLs)                                                                                                                                                 |
+| `octoperf://skills/validation-triage`          | `text/markdown` | Playbook: triage a VU with many validation failures, group by root cause, fix one per group                                                                                                                                                      |
+| `octoperf://skills/scenario-diagnosis`         | `text/markdown` | Playbook: investigate a poor / failing scenario run (global metrics → drill-in → verdict)                                                                                                                                                        |
+| `octoperf://skills/bench-reports`              | `text/markdown` | Reading guide: widget-by-widget mapping to the right `get_report_*_values` tool, semantic gotchas (Hits vs CONTAINER, trend report DELTA, Playwright row types)                                                                                  |
+| `octoperf://skills/real-browser-probe`         | `text/markdown` | Playbook: compose a hybrid scenario (N×JMeter for load + 1×Playwright probe) for user-perceived metrics during a bench                                                                                                                           |
+| `octoperf://skills/scheduling`                 | `text/markdown` | Playbook: schedule a scenario one-shot or cron — Unix 5-field UTC format (NOT Quartz), timezone conversion, pause/resume/delete lifecycle                                                                                                        |
+| `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult)                                                                                                           |
 | `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
 
 ### JSON Schemas (mandatory before any `patch_*`)
@@ -347,14 +338,14 @@ hint pointing back to the matching `octoperf://schema/*` resource
 when the `@type` discriminator is invalid or missing — read the
 error and retry with the same patch corrected.
 
-| URI                                       | Mime               | Use it before                                                                          |
-|-------------------------------------------|--------------------|----------------------------------------------------------------------------------------|
-| `octoperf://schema/vu`                    | `application/json` | `patch_virtual_user` — full polymorphic Action / Extractor / Assertion / PostProcessor tree |
-| `octoperf://schema/scenario`              | `application/json` | `patch_scenario` — `userProfiles` with polymorphic load shapes + engine settings       |
-| `octoperf://schema/bench-report`          | `application/json` | `patch_bench_report` — polymorphic widgets in `items` + per-benchResult `configs`      |
-| `octoperf://schema/variables`             | `application/json` | Constructing a polymorphic `Variable` payload manually (Constant / Counter / Random / CSV / Secret / List) |
+| URI                                       | Mime               | Use it before                                                                                                                                                                    |
+|-------------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `octoperf://schema/vu`                    | `application/json` | `patch_virtual_user` — full polymorphic Action / Extractor / Assertion / PostProcessor tree                                                                                      |
+| `octoperf://schema/scenario`              | `application/json` | `patch_scenario` — `userProfiles` with polymorphic load shapes + engine settings                                                                                                 |
+| `octoperf://schema/bench-report`          | `application/json` | `patch_bench_report` — polymorphic widgets in `items` + per-benchResult `configs`                                                                                                |
+| `octoperf://schema/variables`             | `application/json` | Constructing a polymorphic `Variable` payload manually (Constant / Counter / Random / CSV / Secret / List)                                                                       |
 | `octoperf://schema/correlation-rules`     | `application/json` | Constructing a `CorrelationRule` payload (nested polymorphic extractor + InjectionRule) — `create_correlation_rule` takes typed params, so only needed for advanced custom rules |
-| `octoperf://schema/injection-rules`       | `application/json` | The 8 `InjectionRule` subtypes (header name/value, query-param name/value, post-param name/value, request path, post body) — sub-schema of `correlation-rules` |
+| `octoperf://schema/injection-rules`       | `application/json` | The 8 `InjectionRule` subtypes (header name/value, query-param name/value, post-param name/value, request path, post body) — sub-schema of `correlation-rules`                   |
 
 ## Recommended workflows
 
@@ -363,12 +354,12 @@ catalogues, classification tables, log signatures, …) read the matching
 MCP skill resource via `resources/read` — the server publishes them at
 `octoperf://skills/*`:
 
-| MCP resource URI                            | When to load                                                                |
-|---------------------------------------------|-----------------------------------------------------------------------------|
-| `octoperf://skills/auto-correlation`  | A VU validation fails on session / token / signed-URL replay (workflow 2)   |
-| `octoperf://skills/validation-triage` | A VU validation has many failures and you need to triage by root cause (workflow 3) |
-| `octoperf://skills/scenario-diagnosis`| A scenario run produced bad / failing metrics and the user wants to know why (workflow 5) |
-| `octoperf://skills/async-polling`     | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
+| MCP resource URI                       | When to load                                                                                                                                 |
+|----------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `octoperf://skills/auto-correlation`   | A VU validation fails on session / token / signed-URL replay (workflow 2)                                                                    |
+| `octoperf://skills/validation-triage`  | A VU validation has many failures and you need to triage by root cause (workflow 3)                                                          |
+| `octoperf://skills/scenario-diagnosis` | A scenario run produced bad / failing metrics and the user wants to know why (workflow 5)                                                    |
+| `octoperf://skills/async-polling`      | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
 
 ### 1. Import → validate → fix → run
 
@@ -435,6 +426,7 @@ When validation has many failures, don't read them all serially:
 
 ## See also
 
+- OctoPerf support: <mailto:support@octoperf.com>
 - OctoPerf docs: <https://api.octoperf.com/doc>
 - OctoPerf blog: <https://blog.octoperf.com>
 - OctoPerf tutorials: <https://www.iorad.com/help-center/159034?roleId=7490>

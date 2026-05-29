@@ -50,11 +50,11 @@ mcp__octoperf__get_virtual_user(virtualUserId)
 
 Classify the flow:
 
-| Flow shape                                                  | Path           |
-|-------------------------------------------------------------|----------------|
-| Linear navigation + simple forms (≤ 20 HTTP actions)        | Step 2 (direct translation) |
-| Auth widgets, OAuth popups, file uploads, iframe-heavy SPA, JS-driven canvas | Step 2-bis (`playwright codegen`) |
-| Mixed: most simple, a few complex steps                     | Direct translation, leave `// TODO codegen` markers for the complex blocks |
+| Flow shape                                                                   | Path                                                                       |
+|------------------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Linear navigation + simple forms (≤ 20 HTTP actions)                         | Step 2 (direct translation)                                                |
+| Auth widgets, OAuth popups, file uploads, iframe-heavy SPA, JS-driven canvas | Step 2-bis (`playwright codegen`)                                          |
+| Mixed: most simple, a few complex steps                                      | Direct translation, leave `// TODO codegen` markers for the complex blocks |
 
 Direct translation is fast (no manual capture) but **brittle on
 dynamic UIs**: a single-page app that doesn't change the URL between
@@ -65,19 +65,19 @@ clicks will defeat `page.goto(...)`. When in doubt, codegen.
 Walk the JMeter action tree and emit one Playwright statement per
 action. Translation rules:
 
-| JMeter element                                | Playwright equivalent                                  |
-|-----------------------------------------------|--------------------------------------------------------|
-| `HttpRequestAction` GET                       | `await page.goto(url)`                                 |
+| JMeter element                                | Playwright equivalent                                                      |
+|-----------------------------------------------|----------------------------------------------------------------------------|
+| `HttpRequestAction` GET                       | `await page.goto(url)`                                                     |
 | `HttpRequestAction` POST (form-urlencoded)    | `page.fill('input[name="x"]', value)` + `page.click('input[type=submit]')` |
-| `HttpRequestAction` POST (JSON / multipart)   | `page.evaluate(() => fetch(...))` OR rebuild via real DOM interactions |
-| `${variable}` (JMeter CSV/Counter/Random)     | JS variable, `process.env.X`, or Playwright fixture    |
-| `ResponseAssertion` (BODY contains/not)       | `await expect(page.locator('body')).toContainText(...)` |
-| `ThinktimeConstant`                           | `await page.waitForTimeout(ms)` (use sparingly)        |
-| `JSESSIONID` correlation rule                 | **Delete** — the browser handles cookies natively      |
-| Stripes `_sourcePage` / `__fp` correlation    | **Delete** — the browser submits the live form        |
-| `__VIEWSTATE` correlation                     | **Delete** — same                                      |
-| `LoopContainerAction` (N iterations)          | `for (let i = 0; i < N; i++) { ... }`                 |
-| `IfContainerAction` (condition)               | `if (cond) { ... }`                                   |
+| `HttpRequestAction` POST (JSON / multipart)   | `page.evaluate(() => fetch(...))` OR rebuild via real DOM interactions     |
+| `${variable}` (JMeter CSV/Counter/Random)     | JS variable, `process.env.X`, or Playwright fixture                        |
+| `ResponseAssertion` (BODY contains/not)       | `await expect(page.locator('body')).toContainText(...)`                    |
+| `ThinktimeConstant`                           | `await page.waitForTimeout(ms)` (use sparingly)                            |
+| `JSESSIONID` correlation rule                 | **Delete** — the browser handles cookies natively                          |
+| Stripes `_sourcePage` / `__fp` correlation    | **Delete** — the browser submits the live form                             |
+| `__VIEWSTATE` correlation                     | **Delete** — same                                                          |
+| `LoopContainerAction` (N iterations)          | `for (let i = 0; i < N; i++) { ... }`                                      |
+| `IfContainerAction` (condition)               | `if (cond) { ... }`                                                        |
 
 **Most correlation rules become noise** in the Playwright translation
 — the real browser submits the live form, sends the real cookies, and

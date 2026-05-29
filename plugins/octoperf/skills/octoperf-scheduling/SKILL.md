@@ -41,12 +41,12 @@ A user saying "every night at midnight" almost never means UTC. You
 have to convert their local time to UTC before computing the
 expression. Examples for Europe/Paris:
 
-| User's local cadence            | DST (CEST = UTC+2) | Winter (CET = UTC+1) |
-|---------------------------------|--------------------|----------------------|
-| Daily at midnight Paris         | `0 22 * * *`       | `0 23 * * *`         |
-| Daily at 09:00 Paris            | `0 7 * * *`        | `0 8 * * *`          |
-| Weekdays at 08:30 Paris         | `30 6 * * 1-5`     | `30 7 * * 1-5`       |
-| Monthly on the 1st at 03:00 Paris | `0 1 1 * *`      | `0 2 1 * *`          |
+| User's local cadence              | DST (CEST = UTC+2) | Winter (CET = UTC+1) |
+|-----------------------------------|--------------------|----------------------|
+| Daily at midnight Paris           | `0 22 * * *`       | `0 23 * * *`         |
+| Daily at 09:00 Paris              | `0 7 * * *`        | `0 8 * * *`          |
+| Weekdays at 08:30 Paris           | `30 6 * * 1-5`     | `30 7 * * 1-5`       |
+| Monthly on the 1st at 03:00 Paris | `0 1 1 * *`        | `0 2 1 * *`          |
 
 **Daylight Saving Time is a real concern**: a daily Paris cron set in
 summer will fire one hour off in winter (and vice versa). The user
@@ -61,8 +61,7 @@ unambiguous.
 
 Before `schedule_scenario_*`, call `get_scenario_matching_plans` on
 the scenario. If it returns an empty list, the scheduled run will
-fail at startup *every single fire* — silently burning a credit each
-time until someone notices and disables the job.
+fail at startup *every single fire* until someone notices and disables the job.
 
 ```
 mcp__octoperf__get_scenario_matching_plans(scenarioId)
