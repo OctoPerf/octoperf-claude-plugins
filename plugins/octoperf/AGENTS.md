@@ -124,6 +124,7 @@ Imports split in two shapes:
 | `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU                                                                       |
 | `import_webdriver_virtual_user`   | in-proc  | URL list → browser VU                                                                    |
 | `update_virtual_user`             | —        | Edit metadata (name/description/tags); tree untouched                                    |
+| `backup_virtual_user`             | —        | Duplicate a VU + tag it `backup` before a risky change (no VU versioning in OctoPerf)    |
 | `patch_virtual_user`              | —        | Edit the action tree via RFC 6902 JSON Patch                                             |
 | `delete_virtual_user`             | —        | **Destructive** — drops the tree                                                         |
 

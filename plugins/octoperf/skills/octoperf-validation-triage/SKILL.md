@@ -217,7 +217,7 @@ Apply the ERROR fixes first — validation is blocked until those clear.
 - **Don't fetch failure details for every action.** The index is enough to classify; details are for confirmation, not bulk inspection.
 - **Don't `run_scenario` to debug.** Validation is the right tool — it's cheap, captures full HTTP. A load test gives you metrics, not bodies.
 - **Don't sanity-check after validating.** `sanity_check_virtual_user` is a static check; run it *before* the first validation run, not after. If it would have caught the issue, you wasted a validation cycle.
-- **Don't edit the VU silently.** Summarize what fix you're about to apply and confirm with the user before any `delete_*` or destructive change.
+- **Don't edit the VU silently.** Summarize what fix you're about to apply and confirm with the user before any `delete_*` or destructive change. For irreversible tree edits (`patch_virtual_user`, applying correlations), snapshot first with `backup_virtual_user(virtualUserId, label="pre-triage")` — there's no VU versioning to undo a bad patch.
 
 ## See also
 

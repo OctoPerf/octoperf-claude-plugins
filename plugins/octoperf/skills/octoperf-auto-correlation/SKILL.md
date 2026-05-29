@@ -38,6 +38,23 @@ problem; use the validation-triage skill instead.
 
 ## Steps
 
+### 0. Snapshot the VU before you rewrite it
+
+Correlation rewrites the VU's action tree **in place**, and OctoPerf
+has **no VU versioning** — `apply_correlations_to_virtual_user` and a
+bad custom rule are hard to undo. Take a one-call backup first:
+
+```
+mcp__octoperf__backup_virtual_user(virtualUserId, label="pre-correlation")
+```
+
+This duplicates the VU in the same project (full action tree, recorded
+bodies excluded) and tags the copy `backup` + `pre-correlation` so it's
+easy to find. If a framework or rule mangles the tree, discard the
+working VU and re-correlate from the copy instead of re-importing from
+scratch. Skip it only when the VU is itself a throwaway import you can
+trivially re-create.
+
 ### 1. Confirm the diagnosis on one failing request
 
 Don't skip this. Correlation rewrites your VU; you want to be sure the
