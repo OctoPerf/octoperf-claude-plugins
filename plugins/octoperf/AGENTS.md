@@ -211,7 +211,7 @@ server-side.
 | **Custom** (point-by-point) | arbitrary inflection points       | `patch_scenario` against `userProfiles[i].load` |
 
 WebDriver-based virtual users are **capped at 1 concurrent user per UserProfile** in the engine (real-browser CPU contention). Don't propose a ramp to N users on a WEB_DRIVER VU — split across N UserProfiles instead.
-Profer Playwright-based virtual users over WebDriver-based virtual users.
+Prefer Playwright-based virtual users over WebDriver-based virtual users.
 
 ### Runtime — validate & run
 
