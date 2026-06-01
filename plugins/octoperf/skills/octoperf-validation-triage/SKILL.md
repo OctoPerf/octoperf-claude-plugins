@@ -130,6 +130,72 @@ category:
 - **Assertion failure:** is the matched pattern (e.g. `"Signon failed"` substring) a symptom of an upstream wrongness (auth failed, validation error re-rendered in the page) or an overly-strict assertion? Fix the upstream cause first; loosen the assertion's pattern only if the response is genuinely correct.
 - **Missing dependency:** is the requested resource (`/api/orders/12345`) one that the recording created earlier, but whose id is now stale? → correlation, or use a CSV variable.
 
+### 3b. Inspect live variable state with a DebugAction
+
+When the category is **Auth/state** or **Variable/data**, the decisive
+question is usually *"what value did the variable actually hold at this
+point in the flow?"* — did an extractor capture nothing (empty), capture
+the wrong substring, or capture the right value that the server then
+rejected? The HTTP entities only show what was *sent*; they don't show
+the variable table.
+
+Insert a `DebugAction` (JMeter's Debug Sampler) right after the action
+that *populates* the variable, then re-validate and read its body:
+
+```
+mcp__octoperf__patch_virtual_user(virtualUserId, ops=[{
+  "op": "add",
+  "path": "/children/<index>",
+  "value": {
+    "@type": "DebugAction",
+    "id": "<fresh-uuid>",
+    "enabled": true,
+    "variablesDisplayed": true
+  }
+}])
+```
+
+Two payload gotchas: the body dumps the variable table **only** when
+`variablesDisplayed: true` — omit it and the response comes back empty.
+And `DebugAction` requires a non-null `id` (supply a fresh UUID) and has
+**no** `name` field — don't add one. `propertiesDisplayed` /
+`systemPropertiesDisplayed` stay `false` unless you also want the JMeter
+property dump.
+
+A `DebugAction` always succeeds, so it never shows up in
+`failedTimestamps` — find its run under `successTimestamps` in the index,
+then pull its body:
+
+```
+mcp__octoperf__get_virtual_user_validation_index(virtualUserId)      # grab the DebugAction's successTimestamp
+mcp__octoperf__fetch_validation_http_body(
+  projectId, virtualUserId, debugActionId, timestamp, kind=VALIDATION_RESPONSE)
+```
+
+The body is a dump of every JMeter variable in scope at that point:
+
+```
+JMeterVariables:
+JMeterThread.last_sample_ok=true
+slideTitle=Sample Slide Show
+slideTitle_matchNr=1
+...
+```
+
+How to read it:
+
+- **`var=<value>` + `var_matchNr=1`** → the extractor matched once and
+  captured the value. The correlation works; if the request still fails,
+  the *value* is being rejected (stale, wrong scope), not missing.
+- **`var=` empty, or the variable absent entirely** → the extractor
+  matched nothing. The regex/JSONPath is wrong or runs against the wrong
+  response. → fix the extractor (`patch_virtual_user`) or the correlation rule.
+- **`var_matchNr` > 1** → multiple matches; the wrong occurrence may be
+  injected downstream. Pin the match number.
+
+Remove the `DebugAction` once diagnosed (`patch_virtual_user` with an
+`op: remove`) — it's a diagnostic probe, not part of the script.
+
 ### 4. Apply ONE fix, then re-validate
 
 Resist the urge to fix three things at once. Apply the fix that should
