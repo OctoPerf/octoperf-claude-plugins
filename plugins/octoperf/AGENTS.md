@@ -348,6 +348,25 @@ error and retry with the same patch corrected.
 | `octoperf://schema/correlation-rules`     | `application/json` | Constructing a `CorrelationRule` payload (nested polymorphic extractor + InjectionRule) — `create_correlation_rule` takes typed params, so only needed for advanced custom rules |
 | `octoperf://schema/injection-rules`       | `application/json` | The 8 `InjectionRule` subtypes (header name/value, query-param name/value, post-param name/value, request path, post body) — sub-schema of `correlation-rules`                   |
 
+### HTTP fallback (clients that can't read MCP resources)
+
+Some hosts (e.g. the claude.ai web client) call tools but don't read
+MCP resources. Every schema above is therefore **also served as plain
+JSON over HTTP**, unauthenticated, under `/mcp/public/schema/`. The
+path mirrors the resource URI — `octoperf://schema/vu` →
+`https://api.octoperf.com/mcp/public/schema/vu.json` (swap the origin
+for a self-hosted server). Bodies are byte-identical to the MCP
+resource.
+
+| HTTP URL                                                       | Mirrors                               |
+|----------------------------------------------------------------|---------------------------------------|
+| `https://api.octoperf.com/mcp/public/schema/vu.json`           | `octoperf://schema/vu`                |
+| `https://api.octoperf.com/mcp/public/schema/scenario.json`     | `octoperf://schema/scenario`          |
+| `https://api.octoperf.com/mcp/public/schema/bench-report.json` | `octoperf://schema/bench-report`      |
+| `https://api.octoperf.com/mcp/public/schema/variables.json`    | `octoperf://schema/variables`         |
+| `https://api.octoperf.com/mcp/public/schema/correlation-rules.json` | `octoperf://schema/correlation-rules` |
+| `https://api.octoperf.com/mcp/public/schema/injection-rules.json`   | `octoperf://schema/injection-rules`   |
+
 ## Recommended workflows
 
 Each workflow is a quick-start TL;DR. For deeper playbooks (failure
