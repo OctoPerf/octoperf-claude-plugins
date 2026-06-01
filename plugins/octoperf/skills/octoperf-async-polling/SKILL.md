@@ -28,10 +28,11 @@ If your call returned the final answer (no `taskId` / no
 
 ## The pacing rule
 
-**Sleep between polls.** Each MCP roundtrip takes 100–500 ms of
+**Pace the polls.** Each MCP roundtrip takes 100–500 ms of
 context. Calling the status tool in tight succession over a 10-min
-test would consume 100+ tool turns with identical responses. Insert a
-bounded `Bash sleep N` between calls instead.
+test would consume 100+ tool turns with identical responses. Put a
+delay of `N` between polls — the *how* depends on your harness (see
+"How to insert the delay" below).
 
 Pick `N` from the expected duration of the work:
 
@@ -50,10 +51,30 @@ The cap matters — there is no benefit to sleeping longer than 60s
 even on a multi-hour run, because a hard cap keeps the LLM
 responsive if the run aborts early (ERROR, manual stop).
 
-The `Bash` tool only blocks **unbounded leading sleeps**; a bounded
-`sleep 60` invoked between two MCP calls is fine. Do **not** chain
-multiple short sleeps to fake a longer one — the harness explicitly
-blocks that.
+### How to insert the delay (harness-dependent)
+
+The cadence table is *what* — the *how* depends on which agent harness
+is driving this server:
+
+- **Harnesses that allow a bounded blocking sleep** (most CLI agents):
+  insert a bounded `Bash sleep N` (or equivalent) between two MCP
+  calls. Do **not** chain multiple short sleeps to fake a longer one.
+- **Claude Code blocks *all* blocking sleeps used as a wait** — even a
+  bounded `sleep 60` between two MCP calls is intercepted (it suggests
+  `Monitor` or `run_in_background` instead). Use its native
+  recurring-prompt mechanism: `/loop <interval> <poll-prompt>` (or
+  `CronCreate` directly) re-enters the poll on a wall-clock interval,
+  so the cadence table maps straight to the `/loop` interval (`60s`
+  rounds to cron's 1-min minimum). Each fire re-invokes the MCP status
+  tool; stop the loop with `CronDelete` once the state is terminal.
+
+**Event-watchers don't help here.** The run state lives *behind an MCP
+status tool*, not in any file, log line, or local process. So
+shell-level watchers (Claude Code's `Monitor`, `tail -f`,
+`inotifywait`, a `run_in_background` until-loop) cannot observe it
+without calling the platform REST API directly — which needs the OAuth
+token the MCP server holds. The wake mechanism must re-call the MCP
+status tool, which is exactly what a recurring prompt does.
 
 ## The polling loop
 
@@ -68,7 +89,7 @@ while True:
     status = get_status_tool(handle)
     if is_terminal(status):
         break
-    Bash: sleep N                       # N from the table above
+    wait N                              # bounded sleep, or harness scheduler — see below
 ```
 
 ### Terminal conditions (per status tool)
@@ -122,9 +143,11 @@ still PENDING past that, surface to the user.
 
 ## Anti-patterns
 
-- **Tight-looping the status tool with no sleep.** Burns 1 tool turn
+- **Tight-looping the status tool with no delay.** Burns 1 tool turn
   every few hundred ms on identical responses; for a 10-min run that
-  is 1000+ wasted turns. Always insert a `Bash sleep N`.
+  is 1000+ wasted turns. Always pace the polls — a bounded sleep where
+  the harness allows it, otherwise the harness's recurring-prompt
+  scheduler (Claude Code: `/loop`).
 - **Sleeping for the full expected duration in one shot.** You miss
   early `ERROR` / `ABORTED` transitions (e.g. capacity exhausted at
   startup, image pull failure) and the user waits the whole run for a
