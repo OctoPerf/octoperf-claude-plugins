@@ -339,6 +339,15 @@ hint pointing back to the matching `octoperf://schema/*` resource
 when the `@type` discriminator is invalid or missing — read the
 error and retry with the same patch corrected.
 
+> **Booleans default to `false` when adding a node.** When a `patch_*`
+> op *adds* a node (e.g. an action into `children`), any boolean field
+> you omit deserializes to `false` — and the round-trip validation does
+> **not** flag it. So an action added without `"enabled": true` is
+> created **disabled** and silently does nothing at run time. Always set
+> `"enabled": true` explicitly on inserted actions (the JSON field is
+> `enabled`, not `isEnabled`), and set any display / behaviour flags you
+> actually want rather than relying on defaults.
+
 | URI                                       | Mime               | Use it before                                                                                                                                                                    |
 |-------------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `octoperf://schema/vu`                    | `application/json` | `patch_virtual_user` — full polymorphic Action / Extractor / Assertion / PostProcessor tree                                                                                      |

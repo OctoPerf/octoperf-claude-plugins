@@ -23,10 +23,17 @@ representative per group, and maps each group to the correct fix.
 mcp__octoperf__get_virtual_user_validation_index(virtualUserId)
 ```
 
-The index returns one entry per failing action: action id, action name,
-HTTP method, URL, response status code, brief failure summary. **Do not
-fetch failure details yet** — the index alone is usually enough to
-classify.
+The index returns one entry per **validated** HTTP action — `actionId`,
+`success`/`total` counts, `successTimestamps` and `failedTimestamps`. For
+triage, focus on the entries whose `failedTimestamps` is non-empty (the
+actions that failed at least one run); entries with only `successTimestamps`
+passed every run. **Do not fetch failure details yet** — the index alone is
+usually enough to classify.
+
+(A `successTimestamps` entry is also a handle to read a *passing* run's
+body: pass it to `fetch_validation_http_body` with
+`kind=VALIDATION_RESPONSE` — e.g. to inspect what a Debug-style action
+actually captured on a green run.)
 
 OctoPerf's "KO" rule isn't just "non-2XX". A sample is KO when:
 
@@ -144,7 +151,10 @@ Re-fetch the failure index. Verify:
 If `get_virtual_user_validation_index` comes back empty but the run is
 still marked failed/aborted, the validation engine itself crashed
 (JMeter OOM, missing Playwright dependency, bad locale, …) — there are
-no HTTP samples to read. The validation run produces a `benchResultId`
+no HTTP samples to read. (An empty index now means *no validated
+samples at all*: a VU that ran and passed lists every action with only
+`successTimestamps`, so a truly empty result points at the engine, not
+a clean pass.) The validation run produces a `benchResultId`
 (returned by `validate_virtual_user`) which backs the same log storage
 as a real bench run, so:
 
@@ -218,6 +228,7 @@ Apply the ERROR fixes first — validation is blocked until those clear.
 - **Don't `run_scenario` to debug.** Validation is the right tool — it's cheap, captures full HTTP. A load test gives you metrics, not bodies.
 - **Don't sanity-check after validating.** `sanity_check_virtual_user` is a static check; run it *before* the first validation run, not after. If it would have caught the issue, you wasted a validation cycle.
 - **Don't edit the VU silently.** Summarize what fix you're about to apply and confirm with the user before any `delete_*` or destructive change. For irreversible tree edits (`patch_virtual_user`, applying correlations), snapshot first with `backup_virtual_user(virtualUserId, label="pre-triage")` — there's no VU versioning to undo a bad patch.
+- **Don't omit `enabled` when adding an action.** When a `patch_virtual_user` op *adds* a node to `children`, every boolean defaults to `false` if absent — so an action added without `"enabled": true` is created **disabled** and silently does nothing at run time, with no validation error. Always set `"enabled": true` explicitly on inserted actions. The JSON field is `enabled`, **not** `isEnabled`.
 
 ## See also
 
