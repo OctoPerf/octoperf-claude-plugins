@@ -1,0 +1,44 @@
+name: Publish to MCP Registry
+
+# Publishes server.json to the official MCP Registry
+# (https://registry.modelcontextprotocol.io) under the io.github.octoperf
+# namespace. Identity is proven by the repo's GitHub OIDC token — no secret
+# to manage. Remember to bump "version" in server.json before tagging a release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # required for GitHub OIDC login
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          asset=$(curl -fsSL https://api.github.com/repos/modelcontextprotocol/registry/releases/latest \
+            | grep -o '"browser_download_url": *"[^"]*"' \
+            | sed 's/.*"\(https[^"]*\)"/\1/' \
+            | grep -i 'publisher' | grep -i 'linux' | grep -i 'amd64' \
+            | head -1)
+          if [ -z "$asset" ]; then
+            echo "::error::Could not resolve mcp-publisher linux/amd64 release asset"
+            exit 1
+          fi
+          echo "Downloading $asset"
+          curl -fsSL "$asset" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+          ./mcp-publisher --version
+
+      - name: Login (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
