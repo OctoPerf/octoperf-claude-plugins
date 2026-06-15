@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
-  "name": "io.github.octoperf/octoperf",
+  "name": "io.github.OctoPerf/octoperf",
   "description": "Drive OctoPerf load testing from any AI agent: import, edit, validate, run scenarios, read metrics.",
   "status": "active",
   "version": "1.0.0",
