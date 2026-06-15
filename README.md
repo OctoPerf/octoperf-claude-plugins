@@ -1,6 +1,6 @@
 # OctoPerf — Claude Code plugins
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MCP docs](https://img.shields.io/badge/docs-MCP%20server-6c47ff.svg)](https://api.octoperf.com/doc/mcp/)
 
 Claude Code [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces)
