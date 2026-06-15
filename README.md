@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MCP docs](https://img.shields.io/badge/docs-MCP%20server-6c47ff.svg)](https://api.octoperf.com/doc/mcp/)
+[![smithery badge](https://smithery.ai/badge/gerald-pereira/octoperf)](https://smithery.ai/servers/gerald-pereira/octoperf)
 
 Claude Code [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces)
 for the [OctoPerf](https://octoperf.com) load-testing platform.
