@@ -1,7 +1,15 @@
 # OctoPerf — Claude Code plugins
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![MCP docs](https://img.shields.io/badge/docs-MCP%20server-6c47ff.svg)](https://api.octoperf.com/doc/mcp/)
+
 Claude Code [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces)
 for the [OctoPerf](https://octoperf.com) load-testing platform.
+
+> **Not using Claude Code?** The OctoPerf MCP server is a hosted, client-agnostic
+> remote server (`https://api.octoperf.com/mcp`, Streamable HTTP, OAuth 2.1 — no
+> API key). It works with **any MCP client**. This repo is just the one-step
+> Claude Code entry point — see [Other clients](#other-clients) below.
 
 This repo distributes one plugin (`octoperf`) that:
 
@@ -44,6 +52,13 @@ Revoke at any time from **Account → Connected applications** on OctoPerf.
 | `octoperf-scheduling`              | "schedule the scenario", "run every weekday at 8am"                    |
 | `octoperf-async-polling`           | invoked automatically by any skill that has to poll a `taskId` result  |
 
+
+## Other clients
+
+The MCP server is not Claude-specific. To connect Claude.ai, Claude Desktop,
+Cursor, ChatGPT, Codex, Gemini CLI, GitHub Copilot — or any other MCP client —
+see the **[MCP server documentation](https://api.octoperf.com/doc/mcp/)**. Most
+clients just need the server URL `https://api.octoperf.com/mcp`.
 
 ## License
 
