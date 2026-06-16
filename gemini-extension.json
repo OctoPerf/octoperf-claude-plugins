@@ -1,0 +1,11 @@
+{
+  "name": "octoperf",
+  "version": "1.0.0",
+  "description": "Drive the OctoPerf load-testing platform from Gemini CLI: import, edit, validate, run scenarios, read metrics. Hosted remote server, OAuth 2.1, no API key.",
+  "mcpServers": {
+    "octoperf": {
+      "httpUrl": "https://api.octoperf.com/mcp",
+      "authProviderType": "dynamic_discovery"
+    }
+  }
+}
