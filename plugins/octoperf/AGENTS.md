@@ -443,7 +443,7 @@ When validation has many failures, don't read them all serially:
 
 - Tools marked **Destructive** in this guide consume credits or delete data. Always confirm with the user (PR-style summary, expected impact) before invoking them.
 - `run_scenario` is the most expensive — it triggers a real load test on the configured providers. Never call it as part of an exploratory chain; only when the user explicitly asks to run. Call `get_scenario_matching_plans` first as a pre-flight: an empty list means no plan can host the scenario (use `list_active_subscriptions` to see which cap is binding); a non-empty list confirms the run is launchable as configured.
-- `validate_virtual_user` is light but still consumes a few credits. Batch fixes and re-validate once, not after every micro-edit.
+- `validate_virtual_user` does not consume credits, but it still spins up a load generator and takes time — batch fixes and re-validate once, not after every micro-edit.
 - Imports overwrite nothing: each `import_*` creates a *new* VU. Use `update_*` / `delete_*` if you want to edit in place.
 
 ## Conventions

@@ -350,7 +350,7 @@ WAF, DDoS-protection) rather than a real capacity issue.
 - **Don't re-run the scenario to "see if it's flaky"** unless the user explicitly asks. `run_scenario` is destructive (consumes credits) and rarely the right next move during diagnosis.
 - **Don't drill into per-action metrics until the global view says you should.** Global metrics narrow the problem class in one call; per-action drilling without that context is expensive (tokens, tool calls).
 - **Don't conclude from a half-finished test.** If `get_bench_result.state ∉ {FINISHED, ABORTED, ERROR}`, label the read as preliminary and offer to come back. Use the polling cadence in `octoperf-async-polling` to decide when to re-check.
-- **Don't mix "the load test failed" with "the VU is broken".** The right tool is validation, not load. Surface the distinction to the user — they're paying for the credits either way.
+- **Don't mix "the load test failed" with "the VU is broken".** The right tool is validation (which consumes no credits), not another load run (which burns credits). Surface the distinction to the user.
 
 ## See also
 
