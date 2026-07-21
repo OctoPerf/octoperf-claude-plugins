@@ -75,7 +75,7 @@ All tools are also exposed as same-named MCP prompts (slash commands
 | `list_projects_by_workspace`          | DESIGN projects in a workspace                         |
 | `list_scenarios_by_project`           | STANDARD-mode scenarios of a project                   |
 | `list_virtual_users`                  | Virtual Users (VUs) of a project                       |
-| `list_docker_providers_by_workspace`  | Load-generator providers usable by the workspace       |
+| `list_docker_providers_by_workspace`  | Load-generator providers of the workspace (id, type, driver, locations)  |
 | `list_public_docker_providers`        | Shared OctoPerf Cloud providers                        |
 
 ### Project
@@ -84,6 +84,28 @@ All tools are also exposed as same-named MCP prompts (slash commands
 |-----------------------|--------------------------------------------------------|
 | `create_project`      | New DESIGN project in a workspace                      |
 | `update_project`      | Rename / re-describe / re-tag an existing project      |
+
+### On-premise providers & agents
+
+Run load generators on **your own machines**. A provider *supplies* load
+generators **through agents** you install — each agent starts load generators on
+demand; the provider itself runs none. It is a localized load **capacity** (VUs
+per location); an agent is one Docker container per machine — **one agent per
+machine** (a single agent runs many load generators; stacking agents does not
+add capacity). On-premise is chosen mostly for **reach**: agent machines must be
+able to hit the app under test (internal/private targets the Cloud can't) and
+must **not** be the machine hosting that app. Read
+`octoperf://skills/onpremise-agent` before using these.
+
+| Tool                              | Purpose                                                                                     |
+|-----------------------------------|---------------------------------------------------------------------------------------------|
+| `create_onpremise_docker_provider`| New PRIVATE on-premise provider with one or more named locations (name + lat/long)          |
+| `add_provider_location`           | Add a location to an existing provider                                                       |
+| `update_provider_location`        | Rename / move a location — **renaming orphans its agents** (returns `orphanedAgents`)        |
+| `remove_provider_location`        | **Destructive** — drop a location; its agents are orphaned                                   |
+| `get_onpremise_agent_command`     | The `docker run` command to install an agent on a machine for a provider location           |
+| `list_provider_agents`            | Agents of a provider (state, host) + duplicate-on-host detection + per-agent uninstall cmd   |
+| `get_provider_usage`              | Current capacity & load per location (agents + memory in use) + per-machine memory config    |
 
 ### Virtual User — read & inspect
 
@@ -325,6 +347,7 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/scheduling`                 | `text/markdown` | Playbook: schedule a scenario one-shot or cron — Unix 5-field UTC format (NOT Quartz), timezone conversion, pause/resume/delete lifecycle                                                                                                        |
 | `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult)                                                                                                           |
 | `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
+| `octoperf://skills/onpremise-agent`            | `text/markdown` | Playbook: run load tests from your own machines — model a provider as a localized VU capacity, size it, create it, install one agent per machine, manage locations/agents; the one-agent-per-machine rule and the rename/remove-location → reinstall flow |
 
 ### JSON Schemas (mandatory before any `patch_*`)
 
