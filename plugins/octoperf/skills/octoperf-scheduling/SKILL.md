@@ -77,6 +77,11 @@ because:
 - The orchestration log is the only diagnostic when the run errored
   before producing samples (`list_bench_docker_logs`)
 
+Because that failure is silent, pair a schedule with a `TEST_FAILED` /
+`TEST_ERROR` notification so someone is actually told when a fire goes wrong —
+see `octoperf://skills/notifications` (check `list_notifications_matching_scenario`
+to confirm one already covers this scenario).
+
 ## Steps
 
 ### 1. Decide one-shot vs recurring
