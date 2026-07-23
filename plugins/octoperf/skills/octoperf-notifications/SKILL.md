@@ -2,9 +2,10 @@
 
 Manage a workspace's load-test **notifications** — OctoPerf's **runtime
 alerting layer**. A notification fires a **channel** (email, Slack, Teams,
-Google Chat, Webex, HTTP webhook) when a performance **test run** reaches a
-chosen event (started / ended / passed / failed / error), optionally narrowed
-by **filters**. Their only job is to tell people about test-run outcomes, so
+Google Chat, Webex, HTTP webhook, or JIRA) when a performance **test run**
+reaches a chosen event (started / ended / passed / failed / error), optionally
+narrowed by **filters**. Their only job is to tell people about test-run
+outcomes (JIRA additionally comments on / transitions board issues), so
 they belong to the runtime side of OctoPerf: they pair with `run_scenario` and
 `schedule_scenario_*`, and a scenario surfaces the notifications that will fire
 for its runs (`list_notifications_matching_scenario`). Read this before creating
@@ -17,7 +18,8 @@ A notification = **channel** + **events** (>=1) + **filters** (optional).
 - **Channel** — where the message goes. One typed create tool per channel:
   `create_email_notification`, `create_slack_notification`,
   `create_teams_notification`, `create_google_chat_notification`,
-  `create_webex_notification`, `create_http_notification`.
+  `create_webex_notification`, `create_http_notification`,
+  `create_jira_notification` (multi-step — see Workflow 4).
 - **Events** (`eventIds`, at least one): `TEST_STARTED`, `TEST_ENDED`,
   `TEST_PASSED`, `TEST_FAILED`, `TEST_ERROR`.
 - **Filters** (optional) restrict *which* tests fire it. Omit → fires for every
@@ -80,9 +82,45 @@ only `max` means "at most".
   Use the SAME channel's update tool as the notification's channel.
 - `delete_notification(notificationId)` — permanent, cannot be undone.
 
+## Workflow 4 — JIRA notifications (multi-step)
+
+A JIRA notification comments on the issues in a board's source status column
+when the chosen events fire, and (for Passed / Failed / Error) transitions them
+to a target column. It needs board / status / transition **ids** that only JIRA
+knows, so build the config step by step with the read-only lookup tools before
+calling `create_jira_notification`:
+
+1. `check_jira_notification_connection(connection)` → confirm `reachable: true`.
+   The `connection` is `{ url, connectionType, email?, apiKey }`:
+   - `JIRA_CLOUD` — `url` ends in `.atlassian.net`, `email` = account email,
+     `apiKey` = API token.
+   - `JIRA_DATA_CENTER_BASIC` — `email` = username, `apiKey` = password.
+   - `JIRA_DATA_CENTER_ACCESS_TOKEN` — no `email`, `apiKey` = personal access token.
+2. `list_jira_notification_boards(connection)` → pick a board; keep its
+   `boardId` **and** `projectId` (the project is derived from the board).
+3. `list_jira_notification_statuses(connection, projectId)` → pick the source
+   "To do" `statusId`.
+4. `list_jira_notification_transitions(connection, boardId)` → pick the
+   `passTransitionId` / `failTransitionId` / `errorTransitionId` for whichever
+   of TEST_PASSED / TEST_FAILED / TEST_ERROR you enable. (Transitions are read
+   from existing issues, so the board must contain at least one issue.)
+5. `create_jira_notification(workspaceId, connection, board, eventIds, filters?)`
+   where `board` groups `{ boardId, projectId, statusId, issueNameFilter?,
+   passTransitionId?, failTransitionId?, errorTransitionId? }`. `issueNameFilter`
+   is a summary word (empty = all issues). A transition id only matters when its
+   event is selected.
+
+`apiKey` is write-only like every other secret — resend it on
+`update_jira_notification`. All four lookup tools contact JIRA (open-world) and
+may take a few seconds.
+
+Note: `test_notification` only posts a **dummy comment** on the source-column
+issues to confirm wiring — it does **not** transition anything. Issues are
+actually moved (via the pass/fail/error transitions) only on a **real test
+run's** Passed/Failed/Error event.
+
 ## Notes
 
-- Jira notifications exist server-side but are **not supported here yet**;
-  `list_notifications_by_workspace` omits them.
-- `test_notification` reaches an external target — the only open-world tool in
-  this set. Everything else stays within the OctoPerf dataset.
+- The lookup tools and `test_notification` reach an external target (JIRA / the
+  configured channel) — the open-world tools in this set. Everything else stays
+  within the OctoPerf dataset.

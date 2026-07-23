@@ -325,7 +325,10 @@ narrowed by filters. It pairs with `run_scenario` / `schedule_scenario_*`, and
 `list_notifications_matching_scenario` previews which notifications a scenario's
 runs will fire. One typed create/update tool per channel. Secrets (tokens /
 webhook URLs / header values) are **write-only** — never returned, and must be
-resent on update. Read `octoperf://skills/notifications` first.
+resent on update. The JIRA channel is multi-step: run the four `*_jira_*`
+lookup tools (check → boards → statuses → transitions) to resolve the board /
+status / transition ids, then `create_jira_notification`. Read
+`octoperf://skills/notifications` first.
 
 | Tool                                    | Purpose                                                                                     |
 |-----------------------------------------|---------------------------------------------------------------------------------------------|
@@ -334,6 +337,11 @@ resent on update. Read `octoperf://skills/notifications` first.
 | `list_notifications_matching_scenario`  | Which notifications a given scenario's runs would fire                                       |
 | `create_email_notification`             | Email channel (optional PDF report attachment)                                              |
 | `create_slack_notification` / `_teams_` / `_google_chat_` / `_webex_` / `_http_` | Chat / webhook channels          |
+| `create_jira_notification`              | JIRA channel — comments on / transitions board issues on test events (multi-step, see below) |
+| `check_jira_notification_connection`    | Validate a JIRA connection (open-world) — do this before the JIRA lookups                    |
+| `list_jira_notification_boards`         | JIRA boards (+ their project) reachable with the connection (open-world)                     |
+| `list_jira_notification_statuses`       | Statuses of a JIRA project — pick the source "To do" status (open-world)                     |
+| `list_jira_notification_transitions`    | Transitions of a JIRA board — pick the pass/fail/error target columns (open-world)           |
 | `update_<channel>_notification`         | **Destructive** — overwrite a notification (resend the write-only secret)                    |
 | `delete_notification`                   | **Destructive** — permanently delete a notification                                          |
 | `test_notification`                     | Send a real test message to the channel (open-world; rate-limited 1 / 5s / user)            |
@@ -369,7 +377,7 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult)                                                                                                           |
 | `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
 | `octoperf://skills/onpremise-agent`            | `text/markdown` | Playbook: run load tests from your own machines — model a provider as a localized VU capacity, size it, create it, install one agent per machine, manage locations/agents; the one-agent-per-machine rule and the rename/remove-location → reinstall flow |
-| `octoperf://skills/notifications`              | `text/markdown` | Playbook: manage workspace notifications — pick channel (email/Slack/Teams/Google Chat/Webex/HTTP) → events → filters → test; write-only secrets, resend on update                                                                              |
+| `octoperf://skills/notifications`              | `text/markdown` | Playbook: manage workspace notifications — pick channel (email/Slack/Teams/Google Chat/Webex/HTTP/JIRA) → events → filters → test; write-only secrets, resend on update; JIRA multi-step lookup flow                                             |
 
 ### JSON Schemas (mandatory before any `patch_*`)
 
