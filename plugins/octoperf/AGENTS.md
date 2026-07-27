@@ -269,6 +269,28 @@ CREATED → PENDING → SCALING → PREPARING → INITIALIZING ─┬─→ ERRO
 - `get_bench_status` returns progress `[0.0, 1.0]` while RUNNING; `get_bench_result` returns the canonical state at any time.
 - Docker launch logs (`list_bench_docker_logs`) are the right read when the run is **stuck in PREPARING / INITIALIZING** or ended in **state=ERROR** before JMeter ever started — they show provider quota errors, image pull failures, missing project files, agent boot crashes. Available from the moment the bench is scheduled; no terminal-state wait.
 
+### Runtime — monitoring
+
+Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New Relic / SLA) during a run, through an **UP agent that can reach it**. Monitors are project-scoped, agents workspace-scoped. **Read `octoperf://skills/monitoring` before creating or configuring one.** Create-then-configure: a `create_*` tool makes the monitor with sensible default counters; refine with the selection tools (mandatory for e.g. a Tomcat webapp). Create / check / discovery contact the agent, so they take a few seconds.
+
+| Tool | Purpose |
+|------|---------|
+| `list_monitors_by_project` / `get_monitor` | List / inspect monitors (secret-free: type, agent, target, enabled, tags) |
+| `list_workspace_agents` | Workspace agents with `state` — pick an `UP` one that reaches the target (project↔workspace gap: pass the project's workspace) |
+| `create_linux_monitor` | Linux host over SSH (password or private key) |
+| `create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor` / `create_sqlserver_monitor` | Database over JDBC (url + credentials) |
+| `create_mongodb_monitor` | MongoDB (host / port / database, optional credentials) |
+| `create_nginx_monitor` / `create_apache_httpd_monitor` / `create_lighttpd_monitor` / `create_prometheus_monitor` | Web-server status page / Prometheus `/metrics` url (optional credentials) |
+| `create_generic_jmx_monitor` / `create_tomcat_monitor` / `create_jmeter_monitor` / `create_iis_monitor` / `create_windows_monitor` | JMX endpoint (service url, or host + JMX-RMI port) |
+| `create_newrelic_monitor` | New Relic APM (REST API url + api key) |
+| `create_sla_monitor` | Self-contained monitor of the test's own per-request SLA metrics (independent of Design SLA profiles) |
+| `check_monitor_connection` | Synchronous (waits for the agent, up to ~60s) — asks the agent to open the connection; returns `{reachable, message}` (reachable=true ⇒ reached + creds OK, else the error) |
+| `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux disks / NICs / processes); empty for DB / HTTP / JMX / SLA |
+| `preview_monitor_counters` | Full counter tree flattened to slash-joined paths + `selectedByDefault` (pass application names to include their counters) |
+| `update_monitor_counters` | **Destructive** — replace collected counters by path (a folder keeps its whole subtree); omit paths to reset to defaults |
+| `update_monitor` | **Destructive** — rename / enable-disable / retag / re-point to another agent (does not touch counters) |
+| `delete_monitor` | **Destructive** — remove the monitor (past runs' recorded values unaffected) |
+
 ### Analysis — bench reports
 
 | Tool                                   | Purpose                                                                                                                                                                                                                                                                         |
@@ -378,6 +400,7 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
 | `octoperf://skills/onpremise-agent`            | `text/markdown` | Playbook: run load tests from your own machines — model a provider as a localized VU capacity, size it, create it, install one agent per machine, manage locations/agents; the one-agent-per-machine rule and the rename/remove-location → reinstall flow |
 | `octoperf://skills/notifications`              | `text/markdown` | Playbook: manage workspace notifications — pick channel (email/Slack/Teams/Google Chat/Webex/HTTP/JIRA) → events → filters → test; write-only secrets, resend on update; JIRA multi-step lookup flow                                             |
+| `octoperf://skills/monitoring`                 | `text/markdown` | Playbook: monitor servers during a run — pick an UP agent that reaches the target, create a monitor per type, then configure counters/applications (create-then-configure: `list_monitor_applications` → `preview_monitor_counters` → `update_monitor_counters`, select by path); synchronous connection check; the self-contained SLA monitor |
 
 ### JSON Schemas (mandatory before any `patch_*`)
 
