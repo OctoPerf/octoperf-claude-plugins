@@ -278,14 +278,14 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `list_monitors_by_project` / `get_monitor` | List / inspect monitors (secret-free: type, agent, target, enabled, tags) |
 | `list_workspace_agents` | Workspace agents with `state` — pick an `UP` one that reaches the target (project↔workspace gap: pass the project's workspace) |
 | `create_linux_monitor` | Linux host over SSH (password or private key) |
-| `create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor` / `create_sqlserver_monitor` | Database over JDBC (url + credentials) |
+| `create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor` | Database over JDBC (url + credentials). **Not SQL Server** — see the JMX row |
 | `create_mongodb_monitor` | MongoDB (host / port / database, optional credentials) |
 | `create_nginx_monitor` / `create_apache_httpd_monitor` / `create_lighttpd_monitor` / `create_prometheus_monitor` | Web-server status page / Prometheus `/metrics` url (optional credentials) |
-| `create_generic_jmx_monitor` / `create_tomcat_monitor` / `create_jmeter_monitor` / `create_iis_monitor` / `create_windows_monitor` | JMX endpoint (service url, or host + JMX-RMI port) |
+| `create_generic_jmx_monitor` / `create_tomcat_monitor` / `create_jmeter_monitor` / `create_iis_monitor` / `create_windows_monitor` / `create_sqlserver_monitor` | JMX endpoint (service url, or host + JMX-RMI port). IIS / Windows / **SQL Server** read Windows perf counters through the OctoPerf Windows/JMX bridge on the target (typically port 1099) — SQL Server is *not* JDBC |
 | `create_newrelic_monitor` | New Relic APM (REST API url + api key) |
 | `create_sla_monitor` | Self-contained monitor of the test's own per-request SLA metrics (independent of Design SLA profiles) |
 | `check_monitor_connection` | Synchronous (waits for the agent, up to ~60s) — asks the agent to open the connection; returns `{reachable, message}` (reachable=true ⇒ reached + creds OK, else the error) |
-| `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux disks / NICs / processes); empty for DB / HTTP / JMX / SLA |
+| `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux/Windows/IIS disks / NICs / processes, SQL Server databases / locks / caches); empty for JDBC DB / HTTP / Prometheus / generic JMX / SLA |
 | `preview_monitor_counters` | Full counter tree flattened to slash-joined paths + `selectedByDefault` (type default) + `selected` (this monitor's current selection — read back / incremental edit) (pass application names to include their counters) |
 | `update_monitor_counters` | **Destructive** — replace collected counters by path (a folder keeps its whole subtree); omit paths to reset to defaults |
 | `update_monitor` | **Destructive** — rename / enable-disable / retag / re-point to another agent (does not touch counters) |
