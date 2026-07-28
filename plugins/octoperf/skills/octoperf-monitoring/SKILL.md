@@ -93,9 +93,12 @@ does not offer) with three tools:
    (e.g. every process on a host) — filter it to what the user actually wants.
 2. **`preview_monitor_counters(monitorId, applications?)`** → the full counter
    tree flattened to **slash-joined paths**
-   (`"Network Interfaces / eno1 / Sent Bytes"`) each with `selectedByDefault`.
-   Pass the application names you chose to include their counters (required to
-   see e.g. a Tomcat webapp's or a specific NIC's counters).
+   (`"Network Interfaces / eno1 / Sent Bytes"`) each with `selectedByDefault`
+   (the type's default) and `selected` (what this monitor collects **now** — use
+   it to read back the current selection, or to make an incremental change:
+   re-send the still-`selected` paths plus/minus your edit). Pass the application
+   names you chose to include their counters (required to see e.g. a Tomcat
+   webapp's or a specific NIC's counters).
 3. **`update_monitor_counters(monitorId, applications?, counterPaths?)`** →
    replace the collected counters with the chosen paths. **A folder path keeps
    its whole subtree** (including thresholds), so `"Network Interfaces / eno1"`

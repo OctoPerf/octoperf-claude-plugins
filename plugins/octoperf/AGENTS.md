@@ -286,7 +286,7 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `create_sla_monitor` | Self-contained monitor of the test's own per-request SLA metrics (independent of Design SLA profiles) |
 | `check_monitor_connection` | Synchronous (waits for the agent, up to ~60s) — asks the agent to open the connection; returns `{reachable, message}` (reachable=true ⇒ reached + creds OK, else the error) |
 | `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux disks / NICs / processes); empty for DB / HTTP / JMX / SLA |
-| `preview_monitor_counters` | Full counter tree flattened to slash-joined paths + `selectedByDefault` (pass application names to include their counters) |
+| `preview_monitor_counters` | Full counter tree flattened to slash-joined paths + `selectedByDefault` (type default) + `selected` (this monitor's current selection — read back / incremental edit) (pass application names to include their counters) |
 | `update_monitor_counters` | **Destructive** — replace collected counters by path (a folder keeps its whole subtree); omit paths to reset to defaults |
 | `update_monitor` | **Destructive** — rename / enable-disable / retag / re-point to another agent (does not touch counters) |
 | `delete_monitor` | **Destructive** — remove the monitor (past runs' recorded values unaffected) |
