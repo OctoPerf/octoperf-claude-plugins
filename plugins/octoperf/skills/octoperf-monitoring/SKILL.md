@@ -56,15 +56,19 @@ Each type has its own `create_*_monitor` tool that takes the connection details
 and returns the created monitor:
 
 - **`create_linux_monitor`** — SSH host + username + password *or* sshPrivateKey.
-- **`create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor`
-  / `create_sqlserver_monitor`** — a JDBC url + credentials.
+- **`create_postgres_monitor` / `create_mysql_monitor` /
+  `create_oracle_monitor`** — a JDBC url + credentials. **SQL Server is not in
+  this group**: see `create_sqlserver_monitor` below.
 - **`create_mongodb_monitor`** — host/port/database (+ optional credentials).
 - **`create_nginx_monitor` / `create_apache_httpd_monitor` /
   `create_lighttpd_monitor`** — a status-page url (stub_status / mod_status).
 - **`create_prometheus_monitor`** — a `/metrics` url.
 - **`create_generic_jmx_monitor`** — a full JMX service url; **`create_tomcat_monitor`**
   — host + JMX-RMI port (+ domain, default `Catalina`); **`create_jmeter_monitor`
-  / `create_iis_monitor` / `create_windows_monitor`** — host + JMX-RMI port.
+  / `create_iis_monitor` / `create_windows_monitor` / `create_sqlserver_monitor`**
+  — host + JMX-RMI port. IIS, Windows and **SQL Server** read Windows performance
+  counters through the OctoPerf Windows/JMX bridge installed on the target host
+  (typically port 1099) — SQL Server is *not* monitored over JDBC.
 - **`create_newrelic_monitor`** — New Relic REST API url + api key.
 - **`create_sla_monitor`** — a self-contained monitor of the *test's own*
   per-request metrics (times, errors, percentage counters with pass/fail
@@ -88,14 +92,20 @@ Configure any existing monitor (this even works post-creation, which the web UI
 does not offer) with three tools:
 
 1. **`list_monitor_applications(monitorId)`** → the applications the monitor can
-   collect counters for (`{type, name}`). Empty for types with no application
-   step (databases, HTTP, Prometheus, generic JMX, SLA). The list can be large
-   (e.g. every process on a host) — filter it to what the user actually wants.
+   collect counters for (`{type, name}`): a Tomcat server's webapps, a Linux
+   host's disks / NICs / processes, a Windows or IIS host's CPUs / disks / NICs /
+   processes, a SQL Server's databases / locks / plan caches. Empty for the types
+   with no application step (JDBC databases, HTTP, Prometheus, generic JMX, SLA).
+   The list can be large (e.g. every process on a host) — filter it to what the
+   user actually wants.
 2. **`preview_monitor_counters(monitorId, applications?)`** → the full counter
    tree flattened to **slash-joined paths**
-   (`"Network Interfaces / eno1 / Sent Bytes"`) each with `selectedByDefault`.
-   Pass the application names you chose to include their counters (required to
-   see e.g. a Tomcat webapp's or a specific NIC's counters).
+   (`"Network Interfaces / eno1 / Sent Bytes"`) each with `selectedByDefault`
+   (the type's default) and `selected` (what this monitor collects **now** — use
+   it to read back the current selection, or to make an incremental change:
+   re-send the still-`selected` paths plus/minus your edit). Pass the application
+   names you chose to include their counters (required to see e.g. a Tomcat
+   webapp's or a specific NIC's counters).
 3. **`update_monitor_counters(monitorId, applications?, counterPaths?)`** →
    replace the collected counters with the chosen paths. **A folder path keeps
    its whole subtree** (including thresholds), so `"Network Interfaces / eno1"`
