@@ -99,7 +99,7 @@ same URL repeatedly (typical on a session that revisits pages), the
 server returns HTTP 304 Not Modified and JMeter records the sample —
 but the response time / throughput then reflect a *cache check*, not
 real load on the SUT. If `get_report_pie_values` on the response-codes
-widget shows more than ~40% 304s, flag it: the visible numbers are an
+report item shows more than ~40% 304s, flag it: the visible numbers are an
 optimistic floor, the real SUT cost lives in the 200 samples. To
 diagnose the SUT, filter to status=200 when drilling into per-action
 metrics.
@@ -117,7 +117,7 @@ rate when a chart shows a sudden bump.
   exceeds a single LG's headroom — add LGs, don't blame the SUT.
 - High CPU **after G1 Old collections start** is heap pressure, not
   CPU starvation. Check `G1 Old / collectionCount` on the LG-JVMs
-  widget before recommending more LGs.
+  report item before recommending more LGs.
 - On cloud LGs, `%UsedMemory` alerts essentially never fire (OctoPerf
   pre-provisions). When they fire on an on-prem agent, **another
   process on the host** is the cause — the JVM alone won't trigger it.
@@ -143,7 +143,7 @@ ones tagged `ERROR` or `WARN` first):
 
 | `InsightId`                                                              | Severity at fire | What it means                                                                                  | Where to look next                                                                   |
 |--------------------------------------------------------------------------|------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| `RESPONSE_TIME_GLOBAL_AVG`                                               | INFO/WARN/ERROR  | RT drifts from the test's own average. Severity scales with deviation                          | `get_report_area_range_values` on the linked `inspect` widget                        |
+| `RESPONSE_TIME_GLOBAL_AVG`                                               | INFO/WARN/ERROR  | RT drifts from the test's own average. Severity scales with deviation                          | `get_report_area_range_values` on the linked `inspect` report item                        |
 | `RESPONSE_TIME_STD_DEVIATION`                                            | INFO/WARN/ERROR  | Wide spread between p50 and p99 — user experience is inconsistent                              | `get_report_line_chart_values` on a PercentilesChartReportItem                       |
 | `STEP_BY_STEP_RESPONSE_TIME`                                             | INFO/WARN/ERROR  | One or two actions much slower than the rest — bottleneck on a specific endpoint               | `get_report_top_values` on Top Response Times                                        |
 | `CONNECT_TIME_VS_RESPONSE_TIME`                                          | INFO/WARN/ERROR  | Connect time is a large fraction of RT → TLS handshake / no keep-alive / connection pool small | Check HTTP server config: enable keep-alive, increase `resourcesPool`                |
@@ -154,10 +154,10 @@ ones tagged `ERROR` or `WARN` first):
 | `OVERALL_ERROR_4XX/5XX/NONE`                                             | INFO/WARN/ERROR  | Global error rate per family                                                                   | `get_report_pie_values` on the response-codes pie                                    |
 | `THROUGHPUT_IMAGE_NEW_FORMAT`                                            | INFO             | Old image formats (JPEG/GIF) dominate                                                          | Optimisation hint, not a perf bottleneck                                             |
 | `THROUGHPUT_IMAGE_OPTIMIZE` / `THROUGHPUT_CSS` / `THROUGHPUT_JAVASCRIPT` | INFO             | Bandwidth eaten by un-minified or un-compressed static assets                                  | Optimisation hint                                                                    |
-| `THRESHOLD_ALARM`                                                        | (varies)         | A user-configured `ThresholdAlarmReportItem` fired (e.g. SLA breached)                         | The widget's metric tells you which monitor crossed which threshold                  |
+| `THRESHOLD_ALARM`                                                        | (varies)         | A user-configured `ThresholdAlarmReportItem` fired (e.g. SLA breached)                         | The report item's metric tells you which monitor crossed which threshold                  |
 
-Each `Insight` carries a `more` widget (the visual context) and
-sometimes an `inspect` widget (the drill-down comparison —
+Each `Insight` carries a `more` report item (the visual context) and
+sometimes an `inspect` report item (the drill-down comparison —
 typically an `AreaRangeChartReportItem`). Use the matching
 `get_report_*_values` on those to surface evidence for the user.
 Note that the **same numeric value** that flagged the insight is

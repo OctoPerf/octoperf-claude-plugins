@@ -16,7 +16,7 @@ The server speaks OAuth 2.1 + PKCE + DCR. There is **no API key**; every
 tool call carries a short-lived JWT minted from your user identity.
 
 **Claude Code — quickest path: the official plugin.** It bundles the MCP
-server registration, this `AGENTS.md`, and the eight workflow skills in
+server registration, this `AGENTS.md`, and the sixteen workflow skills in
 one install:
 
 ```text
@@ -69,21 +69,48 @@ All tools are also exposed as same-named MCP prompts (slash commands
 
 ### Discovery
 
+**Start every session with `get_current_user`**, then open your first reply with
+one line naming the account and whether it administers the platform — "You are
+connected to OctoPerf as alice@corp.com (platform administrator)" — before
+answering what was asked. Once per session, in the user's language. Several
+OctoPerf servers (local, preprod, SaaS) can be registered at once and nothing
+else distinguishes them — and the same account is `ADMIN` on one workspace and
+`VIEWER` on the next, so this is also how you know what you may do before you
+attempt it.
+
 | Tool                                  | Purpose                                                |
 |---------------------------------------|--------------------------------------------------------|
-| `list_workspaces`                     | Workspaces the user is a member of                     |
+| `get_current_user`                    | Who this session is connected as: account id, `username` (the e-mail the member tools address it by), `platformAdmin`, and every workspace with the role held there |
+| `list_workspaces`                     | Workspaces the user is a member of, each with the `role` the connected account holds on it |
 | `list_projects_by_workspace`          | DESIGN projects in a workspace                         |
 | `list_scenarios_by_project`           | STANDARD-mode scenarios of a project                   |
 | `list_virtual_users`                  | Virtual Users (VUs) of a project                       |
 | `list_docker_providers_by_workspace`  | Load-generator providers of the workspace (id, type, driver, locations)  |
 | `list_public_docker_providers`        | Shared OctoPerf Cloud providers                        |
 
-### Project
+### Workspace & project
+
+A workspace scopes **members, load-generator providers and their agents, and
+notifications**; a project scopes **virtual users, scenarios, monitors and
+reports**. **Read `octoperf://skills/workspace`** before adding someone to a
+workspace or changing what they can do.
 
 | Tool                  | Purpose                                                |
 |-----------------------|--------------------------------------------------------|
+| `create_workspace`    | New workspace — its own members and load-generator providers. **Not deletable from here, and not self-service**: removal goes through the platform administrator (on-premise) or an OctoPerf support request (SaaS). Create one only for a separate set of members or load generators; to merely group work, `create_project` in an existing workspace |
+| `update_workspace`    | Rename / re-describe a workspace (Admin role required) — the name is what every member sees in the switcher; membership, projects, providers and notifications untouched |
+| `list_workspace_members` | Who has access to a workspace and with which role — members are named by the e-mail their account is registered under |
+| `get_current_user`    | Which account the session is authenticated as, and its role on each workspace — the way to know whether a member change is about to hit yourself |
+| `add_workspace_member` | Give an **existing** OctoPerf account access — **not an invitation**, an unknown address is refused and nothing is e-mailed; arrives as VIEWER unless a role is passed |
+| `set_workspace_member_role` | **Destructive** — replace a member's access with ADMIN / TESTER / TEST_EXECUTOR / VIEWER; a workspace keeps at least one admin, and a user stays admin of at least one workspace |
+| `remove_workspace_member` | **Destructive** — take a member's access away (account and other workspaces untouched); the last admin cannot be removed |
 | `create_project`      | New DESIGN project in a workspace                      |
 | `update_project`      | Rename / re-describe / re-tag an existing project      |
+| `delete_project`      | **Destructive** — the widest delete here: the project goes, and with it every Virtual User, scenario, variable, correlation rule, HTTP server, file, monitor, SLA profile, scheduled job, and every past bench result and report of that project. No restore. Guarded: the project's exact current name must be passed as `confirmProjectName`, so read it from `list_projects_by_workspace` and have the user confirm that name — two projects of one workspace often look alike |
+
+Names are **80 characters** at most and descriptions **2000** — the bounds the web
+forms enforce. Past them the entity's own edit form is invalid the moment it opens,
+so the write is refused rather than truncated.
 
 ### On-premise providers & agents
 
@@ -143,12 +170,33 @@ Imports split in two shapes:
 | `import_postman_virtual_user`     | upload   | Postman v2.1 JSON                                                                        |
 | `import_playwright_virtual_user`  | upload   | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
 | `upload_jmx_virtual_user`         | upload   | JMeter `.jmx` (creates one or more VUs)                                                  |
+| `analyze_neoload_project`         | upload   | NeoLoad archive → portability assessment, writes nothing. Run it **before** importing    |
+| `import_neoload_virtual_user`     | upload   | NeoLoad project folder or its `config.zip` (VUs + servers + variables + scenarios)       |
+| `analyze_loadrunner_project`      | upload   | Zipped VuGen script folder → portability assessment, writes nothing. Ship `data/` with it |
+| `import_loadrunner_virtual_user`  | upload   | Zipped VuGen script folder + its `.lrs` (VUs + servers + variables + `.dat` + scenarios)  |
 | `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU                                                                       |
 | `import_webdriver_virtual_user`   | in-proc  | URL list → browser VU                                                                    |
 | `update_virtual_user`             | —        | Edit metadata (name/description/tags); tree untouched                                    |
 | `backup_virtual_user`             | —        | Duplicate a VU + tag it `backup` before a risky change (no VU versioning in OctoPerf)    |
 | `patch_virtual_user`              | —        | Edit the action tree via RFC 6902 JSON Patch                                             |
 | `delete_virtual_user`             | —        | **Destructive** — drops the tree                                                         |
+
+**Read `octoperf://skills/neoload-migration` before importing a NeoLoad
+project, and `octoperf://skills/loadrunner-migration` before importing a
+LoadRunner script.** The shape of what those two answer with is
+`octoperf://schema/neoload-assessment` and
+`octoperf://schema/loadrunner-assessment` — the upload bypasses the MCP server
+for both the bytes and the response, so neither appears in a tool's
+`outputSchema` and the schema resource is where the vocabulary lives. The import is best-effort by design: it converts what has an
+OctoPerf equivalent and hands back everything else in `unconverted`,
+each entry carrying a `kind`, the `marker` planted in the tree where there
+is one, and — for most kinds — a `facts` object holding the values to act
+on. No entry carries prose: the sentence saying what happened, and what to
+do about it, is the skill's section for that `kind`. What to *do*
+about each kind — which of the three container modes rebuild, why a
+streamed request cannot, where an SLA profile has to be attached, which
+counters to select on a recreated monitor — lives in the skill and
+nowhere else. Without it you have the findings and not the playbook.
 
 #### When the upload is too big
 
@@ -205,7 +253,28 @@ server-side.
 | `delete_correlation_rule`              | **Destructive**                                                        |
 | `apply_correlations_to_virtual_user`   | Async re-walk the VU and rewrite extractors/usages — returns a task id |
 
+### Design SLA profiles
+
+Pass/fail bands on a Virtual User's own metrics (response time, errors, Apdex, …). A profile is inert until it is attached to a VU; on every run the attached profiles become an SLA monitor connection whose breaches surface through `get_report_threshold_alarms`. Attached, they are one of the three lines the scenario page shows under **Pass Criteria**. **Unrelated to `create_sla_monitor`**, which is a project-scoped monitor with a fixed counter set. **Read `octoperf://skills/sla` before creating or editing one.** Create-then-patch: `create_sla_profile` pre-fills the same sourced defaults as the web UI, then retune with `patch_sla_profile`.
+
+| Tool                                    | Purpose                                                                                          |
+|-----------------------------------------|--------------------------------------------------------------------------------------------------|
+| `list_sla_profiles`                     | Profiles of a project — metrics constrained, threshold count, UI deep-link (bands omitted)        |
+| `get_sla_profile`                       | Full profile: every metric group and its graded bands                                            |
+| `list_sla_threshold_defaults`           | Suggested bands per metric, without creating anything (pass `metrics` — the full table is large) |
+| `create_sla_profile`                    | New profile pre-filled with the default bands of the named metrics                                |
+| `patch_sla_profile`                     | **Destructive** — RFC 6902 patch: retune a band, add/remove a metric group                        |
+| `delete_sla_profile`                    | **Destructive** — detach it everywhere first                                                      |
+| `attach_sla_profile_to_virtual_user`    | Bind the profile to a VU (idempotent) — nothing fires before this                                  |
+| `detach_sla_profile_from_virtual_user`  | **Destructive** — unbind; the profile stays available to other VUs                                 |
+
 ### Runtime — scenarios
+
+A scenario says what runs and under which load. What says the run **passed** is not on
+it: the scenario page shows that as **Pass Criteria**, computed from the SLA profiles the
+Virtual Users it plays carry and from the project's enabled monitors. Worth naming once
+while composing a test — never worth forcing. `octoperf://skills/scenario-composition`
+covers the step and how to read the criteria a test already has.
 
 | Tool                             | Purpose                                                                                                                                         |
 |----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -215,6 +284,7 @@ server-side.
 | `get_scenario`                   | Full Scenario (metadata + userProfiles with load shapes + engine settings)                                                                      |
 | `update_scenario`                | Edit metadata (name/description/tags); userProfiles untouched                                                                                   |
 | `patch_scenario`                 | Edit the full scenario via RFC 6902 JSON Patch                                                                                                  |
+| `update_user_profile` | **Destructive** — re-point one user profile: its Virtual User, provider or location. Swapping to a VU of another type swaps the engine block and resets that profile's engine settings |
 | `delete_scenario`                | **Destructive** — drops the scenario configuration                                                                                              |
 | `schedule_scenario_once`         | **Destructive (credits on fire)** — schedule a one-shot scenario run at a given ISO-8601 datetime                                               |
 | `schedule_scenario_cron`         | **Destructive (credits on each fire)** — schedule recurring runs from a Unix 5-field cron expression evaluated in UTC (NOT Quartz / no seconds) |
@@ -278,16 +348,19 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `list_monitors_by_project` / `get_monitor` | List / inspect monitors (secret-free: type, agent, target, enabled, tags) |
 | `list_workspace_agents` | Workspace agents with `state` — pick an `UP` one that reaches the target (project↔workspace gap: pass the project's workspace) |
 | `create_linux_monitor` | Linux host over SSH (password or private key) |
-| `create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor` / `create_sqlserver_monitor` | Database over JDBC (url + credentials) |
+| `create_postgres_monitor` / `create_mysql_monitor` / `create_oracle_monitor` | Database over JDBC (url + credentials). **Not SQL Server** — see the JMX row |
 | `create_mongodb_monitor` | MongoDB (host / port / database, optional credentials) |
 | `create_nginx_monitor` / `create_apache_httpd_monitor` / `create_lighttpd_monitor` / `create_prometheus_monitor` | Web-server status page / Prometheus `/metrics` url (optional credentials) |
-| `create_generic_jmx_monitor` / `create_tomcat_monitor` / `create_jmeter_monitor` / `create_iis_monitor` / `create_windows_monitor` | JMX endpoint (service url, or host + JMX-RMI port) |
+| `create_generic_jmx_monitor` / `create_tomcat_monitor` / `create_jmeter_monitor` / `create_iis_monitor` / `create_windows_monitor` / `create_sqlserver_monitor` | JMX endpoint (service url, or host + JMX-RMI port). IIS / Windows / **SQL Server** read Windows perf counters through the OctoPerf Windows/JMX bridge on the target (typically port 1099) — SQL Server is *not* JDBC |
 | `create_newrelic_monitor` | New Relic APM (REST API url + api key) |
 | `create_sla_monitor` | Self-contained monitor of the test's own per-request SLA metrics (independent of Design SLA profiles) |
 | `check_monitor_connection` | Synchronous (waits for the agent, up to ~60s) — asks the agent to open the connection; returns `{reachable, message}` (reachable=true ⇒ reached + creds OK, else the error) |
-| `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux disks / NICs / processes); empty for DB / HTTP / JMX / SLA |
-| `preview_monitor_counters` | Full counter tree flattened to slash-joined paths + `selectedByDefault` (pass application names to include their counters) |
-| `update_monitor_counters` | **Destructive** — replace collected counters by path (a folder keeps its whole subtree); omit paths to reset to defaults |
+| `list_monitor_applications` | Applications the monitor can collect for (Tomcat webapps, Linux/Windows/IIS disks / NICs / processes, SQL Server databases / locks / caches); empty for JDBC DB / HTTP / Prometheus / generic JMX / SLA |
+| `preview_monitor_counters` | Counter tree flattened to slash-joined paths + `selectedByDefault` (type default) + `selected` (this monitor's current selection — read back / incremental edit); narrow with `"*"` patterns, capped at 200 paths then `groups` summarizes the families (pass application names to include their counters) |
+| `update_monitor_counters` | **Destructive** — replace collected counters by path or `"*"` pattern (a folder keeps its whole subtree, a pattern keeps a whole family); a counter that stays selected keeps its thresholds, folder, renamed name and edited description; fails rather than emptying the monitor when nothing matches; omit paths to reset to defaults |
+| `organize_monitor_counters` | File the collected counters into named folders — `groups=["<folder> => <path or pattern>", …]`, first match wins, moved counters keep their thresholds; rearranges only, never re-selects and never contacts the agent |
+| `set_monitor_thresholds` | Hang alert thresholds on collected counters — JSON array of `{counters, name (≤ 100 chars), severity, one of above/below/between, occurrences\|seconds}`; the range is the state to warn about, same-named thresholds are replaced; never re-selects, never reshapes, never contacts the agent |
+| `get_monitor_counters` | Read side of the three above — what the monitor **actually collects**, each counter under its curated path with name, description, unit and thresholds (in the shape `set_monitor_thresholds` takes, so re-sendable to tune one); narrow with `"*"` patterns, capped at 200; never contacts the agent, and empty ⇒ silent no-op |
 | `update_monitor` | **Destructive** — rename / enable-disable / retag / re-point to another agent (does not touch counters) |
 | `delete_monitor` | **Destructive** — remove the monitor (past runs' recorded values unaffected) |
 
@@ -298,12 +371,29 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `list_bench_reports_by_project`        | Every report of a project (metadata + url) — start here to find reportIds                                                                                                                                                                                                       |
 | `get_bench_report`                     | Full report — polymorphic `items` (charts / tables / top / summary / …) + per-benchResult configs                                                                                                                                                                               |
 | `update_bench_report`                  | Partial metadata edit — name / description / tags (items + configs untouched)                                                                                                                                                                                                   |
-| `patch_bench_report`                   | RFC 6902 JSON Patch over the full BenchReport entity (use `octoperf://schema/bench-report`)                                                                                                                                                                                     |
+| `patch_bench_report`                   | RFC 6902 JSON Patch over the full BenchReport entity (use `octoperf://schema/bench-report`). Metric-bearing items are validated against their allow-select descriptor as a pre-flight — an invalid metric `type`/`id`/filter is rejected with the violations.                    |
 | `delete_bench_report`                  | **Destructive** — drops the report, leaves benchResults intact                                                                                                                                                                                                                  |
 | `create_trend_report_by_tags`          | TREND report anchored on one benchResult, other points picked by tag intersection on bench results                                                                                                                                                                              |
 | `create_trend_report_by_name`          | TREND report anchored on one benchResult, other points picked by scenario-name match (EQUALS / CONTAINS / STARTS_WITH / ENDS_WITH, case-sensitive or not)                                                                                                                       |
 | `create_trend_report_by_creation_date` | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                                                                                                                                              |
+| `create_comparison_report`             | COMPARISON report over 2 to 4 finished runs of one project — the backend lays out the report items with one metric per run. `benchResultIds` is the column order; optional `names` labels the columns instead of the automatic Run A / B / C / D. Static list: adding a run means another report. |
 | `export_bench_report_pdf`              | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
+| `get_report_data_status`               | Whether the report's runs hold their data in the format report queries read — sorts them into `upToDate` / `needsUpdate` / `updating` / `unknown`. A run in the previous format answers every metric query empty, so the value tools refuse rather than return zeros.             |
+| `update_report_data`                   | **Destructive** — rewrites a run's stored data into the current format so the report becomes readable. One async `taskId` per run to poll with `get_task_result`. Ask the user first: it can take minutes on a large run. See `octoperf://skills/bench-reports`.                  |
+
+### Analysis — report templates
+
+A template is a saved report layout, reusable on any later run. It belongs to the **workspace**, so every project of that workspace shares the same list. A run can also be built from one up front — `run_scenario` and `schedule_scenario_once` / `_cron` take an optional `templateId`. See `octoperf://skills/bench-reports`.
+
+| Tool | Purpose |
+|------|---------|
+| `list_report_templates`              | Templates of the project's workspace — id, name, description, `itemCount`, url. Template ids are readable nowhere else. |
+| `get_report_template`                | The template in full — its polymorphic `items` and its `configs`, what the page shows as "Report Contents". Required upstream of `patch_report_template`. |
+| `patch_report_template`              | **Destructive** — RFC 6902 JSON Patch over the template (report items, per-metric colour / Apdex in each metric's own `configs`, template-wide `configs`). Schema: `octoperf://schema/bench-report-template`. Refuses a patch changing `id` / `workspaceId`; metrics are NOT allow-select validated (a template has no run). |
+| `create_report_template_from_report` | Save an existing report as a template. The report is untouched. Filters naming the run's own infrastructure (`region`, `injectorId`, the run's own monitoring connections) are stripped and can take their report item with them — the answer carries `sourceItemCount` + `runSpecificFilterFields` to say what was lost. |
+| `apply_report_template`              | **Destructive** — replaces a report's items with the template's, repointed at that report's run. No undo. Refused on a report comparing several runs (it would collapse to the first column) and on a template of another workspace. |
+| `update_report_template`             | **Destructive** — rename / re-describe. The report items come from the source report, so re-extract to change them. |
+| `delete_report_template`             | **Destructive** — drops the layout; the reports built from it keep their items. |
 
 ### Analysis — report item values
 
@@ -319,14 +409,25 @@ After `get_bench_report`, dispatch by the item's `@type` to read its aggregated 
 | `get_report_stacked_chart_values`    | `StackedChartReportItem`                                                                      | `List<MapGraphPoint>`                                                                |
 | `get_report_area_range_values`       | `AreaRangeChartReportItem`                                                                    | `AreaRangeResult` (curve + ref + rmse)                                               |
 | `get_report_summary_values`          | `SummaryReportItem` / `BarChartReportItem` (with optional from/to)                            | `List<Double>` aligned with `item.metrics`                                           |
-| `get_report_insights`                | `InsightsReportItem` (with optional from/to window)                                           | `Set<Insight>` (id + level + value + drill-in widgets)                               |
+| `get_report_insights`                | `InsightsReportItem` (with optional from/to window)                                           | `Set<Insight>` (id + level + value + drill-in report items)                               |
 | `get_report_errors`                  | `ErrorsReportItem` (with optional from/to window)                                             | `List<BenchError>` (per-sample failures)                                             |
 | `fetch_bench_error_http`             | One `BenchError` (`benchResultId` + `actionId` + `timestamp`)                                 | `(HttpRequestEntity, HttpResponseEntity)` of the failing sample                      |
 | `get_report_threshold_alarms`        | `ThresholdAlarmReportItem` (with optional from/to window)                                     | `List<ThresholdAlarm>` (per-breach: severity, threshold, observed)                   |
 | `get_report_textual_monitors`        | `TextualMonitorReportItem`                                                                    | `List<TextualCounterValue>` (string-valued monitor samples)                          |
 | `list_bench_load_generators`         | `LoadGeneratorsChartReportItem` / `LoadGeneratorsTreeReportItem` — both pull from same source | `List<BenchLoadGenerator>` (one per LG container: region, host, VU count, start/end) |
 
-**Metric name semantics** — when reading widget metrics from any
+### Analysis — report item editing
+
+To change a report item's metrics/filters, resolve what's selectable, discover values, validate, then patch. See `octoperf://skills/report-item-editing`.
+
+| Tool                             | Purpose                                                                                                                                              |
+|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `get_report_item_allow_select`   | Resolve an item's allowed `sampleTypes`, `metricIdsBySampleType`, and per-tag-key `tagKeyConstraints` (offered/required, allowedValues, single, dependsOn) |
+| `get_report_tag_keys`            | Tag keys (filter dimensions) indexed for a report's bench results + sample type                                                                       |
+| `get_report_tag_values`          | Distinct values per tag key, optionally scoped by already-selected filters (e.g. `injectorId` values for a chosen `region`)                           |
+| `validate_report_item`           | Validate an item's metrics against its allow-select descriptor → `ReportItemValidation` (`valid` + `violations`). `patch_bench_report` runs this too. |
+
+**Metric name semantics** — when reading report item metrics from any
 `get_report_*_values` tool:
 
 - `Hits` (and related rates: `Hits/s`, `Hits successful total`) count **HTTP/S samplers only**.
@@ -393,14 +494,20 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/auto-correlation`           | `text/markdown` | Playbook: fix a VU whose validation fails on dynamic values (CSRF tokens, sessions, signed URLs)                                                                                                                                                 |
 | `octoperf://skills/validation-triage`          | `text/markdown` | Playbook: triage a VU with many validation failures, group by root cause, fix one per group                                                                                                                                                      |
 | `octoperf://skills/scenario-diagnosis`         | `text/markdown` | Playbook: investigate a poor / failing scenario run (global metrics → drill-in → verdict)                                                                                                                                                        |
-| `octoperf://skills/bench-reports`              | `text/markdown` | Reading guide: widget-by-widget mapping to the right `get_report_*_values` tool, semantic gotchas (Hits vs CONTAINER, trend report DELTA, Playwright row types)                                                                                  |
+| `octoperf://skills/bench-reports`              | `text/markdown` | Reading guide: report item-by-report item mapping to the right `get_report_*_values` tool, semantic gotchas (Hits vs CONTAINER, trend report DELTA, Playwright row types)                                                                                  |
+| `octoperf://skills/report-item-editing`        | `text/markdown` | Editing guide: allow-select-driven workflow to change a report item's metrics/filters (`get_report_item_allow_select` → `get_report_tag_keys`/`get_report_tag_values` → `validate_report_item` → `patch_bench_report`)                               |
 | `octoperf://skills/real-browser-probe`         | `text/markdown` | Playbook: compose a hybrid scenario (N×JMeter for load + 1×Playwright probe) for user-perceived metrics during a bench                                                                                                                           |
 | `octoperf://skills/scheduling`                 | `text/markdown` | Playbook: schedule a scenario one-shot or cron — Unix 5-field UTC format (NOT Quartz), timezone conversion, pause/resume/delete lifecycle                                                                                                        |
 | `octoperf://skills/export-bench-report-pdf`    | `text/markdown` | Playbook: export a benchReport as PDF via the async print task (submit → poll `get_task_result` → download from the first benchResult)                                                                                                           |
 | `octoperf://skills/async-polling`              | `text/markdown` | Reference: how to poll OctoPerf async ops (validate, run, export, correlate) — sleep cadence `expected_duration / 10` clamped `[3s, 60s]`, terminal conditions per status tool, anti-patterns (tight loop, `get_bench_status` as terminal check) |
 | `octoperf://skills/onpremise-agent`            | `text/markdown` | Playbook: run load tests from your own machines — model a provider as a localized VU capacity, size it, create it, install one agent per machine, manage locations/agents; the one-agent-per-machine rule and the rename/remove-location → reinstall flow |
+| `octoperf://skills/workspace`                  | `text/markdown` | Playbook: what a workspace scopes (members, providers/agents, notifications) vs what a project scopes; members by e-mail and the four roles; the two last-admin rules; adding a member is not an invitation; creating is free, deleting goes through the platform admin or support |
 | `octoperf://skills/notifications`              | `text/markdown` | Playbook: manage workspace notifications — pick channel (email/Slack/Teams/Google Chat/Webex/HTTP/JIRA) → events → filters → test; write-only secrets, resend on update; JIRA multi-step lookup flow                                             |
-| `octoperf://skills/monitoring`                 | `text/markdown` | Playbook: monitor servers during a run — pick an UP agent that reaches the target, create a monitor per type, then configure counters/applications (create-then-configure: `list_monitor_applications` → `preview_monitor_counters` → `update_monitor_counters`, select by path); synchronous connection check; the self-contained SLA monitor |
+| `octoperf://skills/monitoring`                 | `text/markdown` | Playbook: monitor servers during a run — pick an UP agent that reaches the target, create a monitor per type, then configure counters/applications (create-then-configure: `list_monitor_applications` → `preview_monitor_counters` → `update_monitor_counters`, select by path or `"*"` pattern); synchronous connection check; the self-contained SLA monitor |
+| `octoperf://skills/scenario-composition`      | `text/markdown` | Playbook: build or reshape a scenario's userProfiles — the four load shapes and their millisecond fields, one engine per VU type, setUp/tearDown as profile settings, create-then-patch; plus **Pass Criteria** — what says the run passed, why none of it is stored on the scenario, and the derivation that reads the ones a test already has |
+| `octoperf://skills/loadrunner-migration`       | `text/markdown` | Playbook: migrate a LoadRunner VuGen script and its Controller scenario — read the portability verdict before committing (a script can be `QTWeb` and send nothing at all: its calls are C), import, then work the `unconverted` list kind by kind (hand-written C, conditions reading C locals, recorded cookies, parameterised servers, loop bounds, load generators, the pace between iterations, the parameters and dates a script writes, the credentials on a server, the SLA profiles to attach, the emulated network a group sat on). **Mandatory before importing**: the entries say what happened, the skill says what to do |
+| `octoperf://skills/neoload-migration`          | `text/markdown` | Playbook: migrate a NeoLoad project — read the portability verdict before committing, import, then work the `unconverted` list kind by kind (plugin dialogs, NeoLoad JavaScript, try/catch, waits, pushed and played requests, SOAP envelopes, container draws, monitors, SLA profiles). **Mandatory before importing**: the entries say what happened, the skill says what to do |
+| `octoperf://skills/sla`                        | `text/markdown` | Playbook: Design SLA profiles — separating them from `create_sla_monitor`, the threshold-group model (severity, OPEN/CLOSED range bounds, occurrence-count vs millisecond hold), create-then-patch with sourced defaults, JSON Patch recipes, and the attach step without which nothing fires |
 
 ### JSON Schemas (mandatory before any `patch_*`)
 
@@ -428,7 +535,7 @@ error and retry with the same patch corrected.
 |-------------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `octoperf://schema/vu`                    | `application/json` | `patch_virtual_user` — full polymorphic Action / Extractor / Assertion / PostProcessor tree                                                                                      |
 | `octoperf://schema/scenario`              | `application/json` | `patch_scenario` — `userProfiles` with polymorphic load shapes + engine settings                                                                                                 |
-| `octoperf://schema/bench-report`          | `application/json` | `patch_bench_report` — polymorphic widgets in `items` + per-benchResult `configs`                                                                                                |
+| `octoperf://schema/bench-report`          | `application/json` | `patch_bench_report` — polymorphic report items in `items` + per-benchResult `configs`                                                                                                |
 | `octoperf://schema/variables`             | `application/json` | Constructing a polymorphic `Variable` payload manually (Constant / Counter / Random / CSV / Secret / List)                                                                       |
 | `octoperf://schema/correlation-rules`     | `application/json` | Constructing a `CorrelationRule` payload (nested polymorphic extractor + InjectionRule) — `create_correlation_rule` takes typed params, so only needed for advanced custom rules |
 | `octoperf://schema/injection-rules`       | `application/json` | The 8 `InjectionRule` subtypes (header name/value, query-param name/value, post-param name/value, request path, post body) — sub-schema of `correlation-rules`                   |
@@ -451,6 +558,7 @@ resource.
 | `https://api.octoperf.com/mcp/public/schema/variables.json`    | `octoperf://schema/variables`         |
 | `https://api.octoperf.com/mcp/public/schema/correlation-rules.json` | `octoperf://schema/correlation-rules` |
 | `https://api.octoperf.com/mcp/public/schema/injection-rules.json`   | `octoperf://schema/injection-rules`   |
+| `https://api.octoperf.com/mcp/public/schema/sla-profile.json`  | `octoperf://schema/sla-profile`       |
 
 ## Recommended workflows
 
@@ -461,9 +569,11 @@ MCP skill resource via `resources/read` — the server publishes them at
 
 | MCP resource URI                       | When to load                                                                                                                                 |
 |----------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `octoperf://skills/workspace`          | About to add someone to a workspace, change what they can do, or create a workspace                                                          |
 | `octoperf://skills/auto-correlation`   | A VU validation fails on session / token / signed-URL replay (workflow 2)                                                                    |
 | `octoperf://skills/validation-triage`  | A VU validation has many failures and you need to triage by root cause (workflow 3)                                                          |
 | `octoperf://skills/scenario-diagnosis` | A scenario run produced bad / failing metrics and the user wants to know why (workflow 5)                                                    |
+| `octoperf://skills/sla`                | Creating or editing an SLA profile, or explaining which SLA band a run breached                                                               |
 | `octoperf://skills/async-polling`      | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
 
 ### 1. Import → validate → fix → run
@@ -517,7 +627,7 @@ When validation has many failures, don't read them all serially:
 
 ## Safety conventions
 
-- Tools marked **Destructive** in this guide consume credits or delete data. Always confirm with the user (PR-style summary, expected impact) before invoking them.
+- Tools marked **Destructive** in this guide consume credits or delete data. Always confirm with the user (PR-style summary, expected impact) before invoking them. Name the account the work will be done as — `get_current_user` — in that confirmation.
 - `run_scenario` is the most expensive — it triggers a real load test on the configured providers. Never call it as part of an exploratory chain; only when the user explicitly asks to run. Call `get_scenario_matching_plans` first as a pre-flight: an empty list means no plan can host the scenario (use `list_active_subscriptions` to see which cap is binding); a non-empty list confirms the run is launchable as configured.
 - `validate_virtual_user` does not consume credits, but it still spins up a load generator and takes time — batch fixes and re-validate once, not after every micro-edit.
 - Imports overwrite nothing: each `import_*` creates a *new* VU. Use `update_*` / `delete_*` if you want to edit in place.
@@ -525,6 +635,7 @@ When validation has many failures, don't read them all serially:
 ## Conventions
 
 - IDs are opaque strings. Never construct them by hand; always read them from a `list_*` or a previous tool result.
+- Rights are per workspace, not per account: read the `role` on the workspace you are about to write to rather than assuming the one you hold elsewhere. `CUSTOM` is a fine-grained access only the web UI edits — assume nothing from it.
 - Listings always include a `url` deep-link to the OctoPerf UI. Render it when you summarize a list for the user.
 - Most read tools are safe and idempotent. Prefer `list_*` / `get_*` before any mutation.
 - Long-running operations (`apply_correlations_to_virtual_user`, validation, scenario run) all return ids you can poll with the matching `get_*_status` / `get_task_result` tool. Don't busy-loop; poll on a sensible interval and let the user know when it completes.

@@ -23,6 +23,10 @@ value tools (`get_report_summary_values`, `get_report_table_values`,
 - The underlying bench run is terminal (FINISHED / ABORTED / ERROR).
   Printing a report whose run is still RUNNING is allowed but the
   metrics inside the PDF will be partial.
+- The report's data is up to date. `export_bench_report_pdf` refuses
+  otherwise, rather than rendering a document of empty report items: run
+  `get_report_data_status`, then `update_report_data`, and print once
+  the update tasks reach SUCCESS. See `octoperf-bench-reports`.
 
 ## The three-step chain
 
@@ -52,7 +56,7 @@ get_task_result(taskId)
   the user verbatim and stop.
 
 Typical render time is 10–30 seconds; expect more on large reports
-(many widgets, long trend series). For the polling cadence and the
+(many report items, long trend series). For the polling cadence and the
 sleep-between-polls discipline, read `octoperf-async-polling` — the
 PDF task is in its table (3s between polls, ~5 min outer deadline).
 

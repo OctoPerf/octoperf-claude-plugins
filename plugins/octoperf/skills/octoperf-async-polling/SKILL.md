@@ -21,6 +21,7 @@ You started one of:
 | `validate_virtual_user`                            | `benchResultId`                       | `get_virtual_user_validation` (or `get_bench_result`)     |
 | `run_scenario`                                     | `benchReportId` + `benchResultIds[]`  | `get_bench_result` (state) and/or `get_bench_status` (%)  |
 | `export_bench_report_pdf`                          | `taskId`                              | `get_task_result`                                         |
+| `update_report_data`                               | one `taskId` per run to update        | `get_task_result`                                         |
 | Async correlation task (auto-correlate workflow)   | `taskId`                              | `get_task_result`                                         |
 
 If your call returned the final answer (no `taskId` / no
@@ -140,6 +141,14 @@ For a **PDF export** / **correlation task**, you don't know the
 duration upfront. Use the table's `3s` cadence with a generous outer
 deadline (~5 min for PDF, ~2 min for correlation); if the task is
 still PENDING past that, surface to the user.
+
+For a **report data update** (`update_report_data`), the duration
+scales with how many samples the run holds — seconds for a smoke test,
+minutes for a long high-load run. Poll every `10s` with a ~15 min
+deadline, and tell the user what is happening rather than going quiet:
+the report items stay unreadable until each task reaches SUCCESS. The runs
+being updated are listed by `get_report_data_status`; see
+`octoperf-bench-reports` for when a read refuses in the first place.
 
 ## Anti-patterns
 

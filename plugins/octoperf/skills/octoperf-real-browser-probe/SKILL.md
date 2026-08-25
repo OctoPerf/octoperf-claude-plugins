@@ -53,7 +53,7 @@ Classify the flow:
 | Flow shape                                                                   | Path                                                                       |
 |------------------------------------------------------------------------------|----------------------------------------------------------------------------|
 | Linear navigation + simple forms (≤ 20 HTTP actions)                         | Step 2 (direct translation)                                                |
-| Auth widgets, OAuth popups, file uploads, iframe-heavy SPA, JS-driven canvas | Step 2-bis (`playwright codegen`)                                          |
+| Auth report items, OAuth popups, file uploads, iframe-heavy SPA, JS-driven canvas | Step 2-bis (`playwright codegen`)                                          |
 | Mixed: most simple, a few complex steps                                      | Direct translation, leave `// TODO codegen` markers for the complex blocks |
 
 Direct translation is fast (no manual capture) but **brittle on
@@ -139,7 +139,7 @@ config-less layout note above) — put any per-test config via
 ### 2-bis. Codegen capture (alternative)
 
 When direct translation would be brittle (heavy SPA, OAuth popup,
-custom widget), capture the journey live with Playwright codegen:
+custom report item), capture the journey live with Playwright codegen:
 
 ```sh
 npx playwright codegen https://target-url.com
@@ -170,8 +170,9 @@ listing.
 ```
 upload = mcp__octoperf__import_playwright_virtual_user(projectId)
 # POST the spec bytes to `upload.url` as multipart/form-data, single
-# part named `file`, Content-Type `text/plain; charset=utf-8`. Read
-# the returned VU's `id`, then:
+# part named `files` — plural, that is the field the endpoint reads —
+# Content-Type `text/plain; charset=utf-8`. Read the returned VU's
+# `id`, then:
 mcp__octoperf__describe_virtual_user(virtualUserId)
 ```
 
@@ -273,7 +274,8 @@ scenario or upgrade.
 
 ```
 mcp__octoperf__run_scenario(scenarioId)
-mcp__octoperf__get_bench_status(benchResultId)   # poll until 1.0
+mcp__octoperf__get_bench_result(benchResultId)    # poll until state=FINISHED
+mcp__octoperf__get_bench_status(benchResultId)    # progress 0-100, display only
 ```
 
 In the resulting `get_bench_report`, both VUs show up — but their
