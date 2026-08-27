@@ -14,7 +14,7 @@ and the credentials `web_set_user` puts on a server. Given a provider it
 also reads the `.lrs` — each Controller group becomes a user profile
 carrying the load its schedule describes. It deliberately
 stops short of what has no OctoPerf equivalent, and hands back everything
-it left undone in the response's `unconverted` list — usually as a
+it left undone in the response's `unconverted` list, some of it as a
 **named marker** planted in the tree. This skill is what turns that list
 into a test that runs.
 
@@ -125,9 +125,20 @@ read `@type` before the fields. An entry with no `facts` at all is a
 kind whose section needs no values from the project: the section alone
 is the instruction.
 
-Most entries also name a `marker` — the exact action name planted in the
-tree. Find it with `get_virtual_user`, rewrite it with
-`patch_virtual_user` against `octoperf://schema/vu`.
+Some entries also name a `marker`, and a marker is a promise: a node of
+**exactly** that name is in the tree. Find it with `get_virtual_user`,
+rewrite it with `patch_virtual_user` against `octoperf://schema/vu`.
+
+An empty `marker` is the ordinary case, and it says something too: the
+work is not a step in a tree at all. A variable to fill, a server to
+point at an environment, a parameter a `.prm` declares, an iteration
+count that belongs to a user profile — searching a tree for those wastes
+a pass over it. Work those from the `kind`, the `script` and the `line`.
+The kinds that do plant one are `CUSTOM_C_CODE`,
+`UNSUPPORTED_FUNCTION`, the protocol kinds, `CONVERSION_FAILED`,
+`MISSING_SNAPSHOT`, `LOOP_BOUND_NOT_LITERAL`, `RENDEZVOUS_POLICY` and
+`SCRIPT_SEQUENCE` — the last one naming a Virtual User rather than an
+action.
 
 Work from the list, not from the tree. A `[LoadRunner] …` name is not by
 itself something to fix. If a name is not in `unconverted`, leave it.
@@ -396,6 +407,11 @@ So: for each name, decide whether the application needs it.
 - **Third-party analytics** — `_ga`, `_gid`, `_gat`, `mbox`, `ak_bmsc` —
   leave out. Replaying an Akamai bot-management token from 500 users is
   worse than not sending it.
+
+`web_cleanup_cookies` is in neither the list nor the tree, and that is
+correct rather than a gap: JMeter manages its own cookie store and a
+virtual user starts each iteration with an empty jar. A script that
+called it deliberately already has what it asked for.
 
 ### `MISSING_SNAPSHOT` — the click has no URL to recover
 
@@ -1013,6 +1029,17 @@ at random". Beside rather than instead, because a script routinely reads
 the whole array as well. If you see two extractors on one request with
 identical expressions, that is why; deleting the one with match number
 `-1` breaks whatever reads the full list.
+
+**What a capture reads.** VuGen scopes an extractor and a check with
+`Scope=` or `Search=`, and the two spellings mean the same thing.
+`Cookies` and `Headers` became an extractor on the response **headers** —
+a cookie reaches a client in a `Set-Cookie` header, so a session
+correlated with `"Scope=Cookies"` reads them. `Body`, and a call naming
+no scope at all, became one on the body. `All` searched both, which an
+OctoPerf extractor cannot, and lands on the **body**. So a value
+correlated out of a header with `Scope=All` is the one capture to
+re-point by hand: the tree and the expression both look right and the
+variable comes back empty, several steps before anything fails.
 
 **Content types.** `EncType=` is where VuGen keeps a request's content
 type — 1564 call sites in the corpus against four that set a

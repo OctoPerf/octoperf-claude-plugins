@@ -209,8 +209,16 @@ run: it is written against the NeoLoad JavaScript API. Translate:
 | `context.variableManager.getValue("X")` | `vars.get("X")` |
 | `context.variableManager.setValue("X", v)` | `vars.put("X", v)` |
 | `logger.debug(msg)` / `logger.error(msg)` | `log.debug(msg)` / `log.error(msg)` |
-| `context.currentVirtualUser.name` | `ctx.getThreadGroup().getName()` |
+| `context.currentVU.name` | `ctx.getThreadGroup().getName()` |
+| `context.currentVU.id` | `ctx.getThreadNum()` |
 | `new com.acme.Whatever()` from the project's `lib` | nothing — the jar is not there |
+
+`context.currentVU` is the object, not `context.currentVirtualUser`:
+reading a property off the latter throws
+`TypeError: Cannot read property "name" from undefined`. The NeoLoad
+library every project ships states both under `scripts/neoload-1.0.js`,
+in `__getUserPathName()` and `__getVirtualUserID()` — read it there
+rather than guessing at the API.
 
 Switch the action's `language` to `groovy` once translated; the
 imported one is set to `javascript` only because that is what the
@@ -886,7 +894,7 @@ it sits in, in the words `create_correlation_rule` takes.
 
 ```json
 {"@type": "NeoLoadCorrelationFacts",
- "variable": "SAP_JSESSIONID", "expression": "set-cookie: JSESSIONID=([^;]+)",
+ "variable": "SAP_JSESSIONID", "expression": "(?i:set-cookie): JSESSIONID=([^;]+)",
  "extractFrom": "HEADERS", "targets": ["HEADER", "PATH"],
  "occurrences": 4, "virtualUsers": ["PetStore"]}
 ```
@@ -909,6 +917,55 @@ stays hard-coded — the `_sourcePage` and `__fp` tokens of a Stripes
 application are the usual example. Those surface at validation, which is
 where `octoperf-auto-correlation` takes over.
 
+### `COLUMN_MAPPING` — a parameterisation put back on its own column
+
+The second entry that reports nothing broken, and the only one reporting a
+value the import changed rather than carried.
+
+NeoLoad parameterises a recorded request by matching the recorded **values**
+against the columns of the data file, so two parameters holding the same
+recorded string both resolve to whichever column matched first. A demo
+account whose login and password are the same — `j2ee` on JPetStore — signs
+in with its login twice:
+
+```xml
+<parameter name="username" recordRawValue="j2ee"              value="${Accounts.username}"/>
+<parameter name="password" recordRawValue="${AutoPassword_1}" value="${Accounts.username}"/>
+```
+
+Nothing in the project says the second one is wrong, and it imports clean:
+the tree looks right, the request answers 200, and the session is simply
+never signed in. What says it is the pair — two parameters of one request
+reading the same column, one of them named after another column the same
+variable declares — so the reference is moved onto the column carrying the
+parameter's name and the move is reported here.
+
+```json
+{"@type": "NeoLoadColumnMappingFacts",
+ "parameter": "password", "variable": "Accounts",
+ "stated": "username", "used": "password"}
+```
+
+`stated` is the column the NeoLoad project points at, `used` the one the
+import bound instead, and `marker` names the request itself rather than a
+planted action — nothing was planted, the parameter converted. Nothing to
+do in the normal case — check it and move on. Two things are worth a look:
+
+- **Fix the source too** if the project stays in use on both sides. The
+  Controller replays the same broken sign-in.
+- **Put it back** if `stated` was deliberate — a `password` field the
+  application really expects the login in. Patch the request's parameter
+  to `${username}`, the reference having been rewritten to the column
+  name alone by then.
+
+A parameter reading a column of another name **on its own** is never
+touched: feeding a search field from a `keyword` column is what
+parameterising a request is, and a lone reference carries nothing to tell
+that from a mistake. So this catches the collision and not the single
+parameter NeoLoad mapped wrong with nothing beside it — if a login works
+nowhere and the credentials are the suspect, compare each parameter's
+`recordRawValue` against the column its `value` names.
+
 ## 4. Check what came through, not just what did not
 
 These convert silently and are worth verifying before you hand the
@@ -922,6 +979,34 @@ recording holds. `set-cookie: JSESSIONID=([^;]+)` lands on the headers,
 and an expression matching neither reads the body. An extractor whose
 variable stays at its default through a whole run is worth checking here
 first.
+
+**Header case, which the protocol decided and not the project.** An
+expression landing on the headers has its header name widened on the way
+in — `set-cookie: JSESSIONID=([^;]+)` arrives as
+`(?i:set-cookie): JSESSIONID=([^;]+)` — and it has to be. HTTP/2 and
+HTTP/3 lowercase every field name by specification, so a project recorded
+over either states its header names in lower case, while the JMeter replay
+runs over HTTP/1.1 and receives whatever the server sends:
+
+```
+Recorded (HTTP/2):   set-cookie: JSESSIONID=5C60C69AE8D0673AB704BDABE47C3456; Path=/
+Replayed (HTTP/1.1): Set-Cookie: JSESSIONID=CFB65E00D5791E3E0709E2EBAC5521F2; Path=/
+```
+
+Java regular expressions are case-sensitive, so the unwidened expression
+matches nothing: the extractor hands back its default value and the
+assertion built on it fails — **on a request that answered 200 with a
+byte-identical body**, which is what makes it hard to place. Only the
+header name is widened, and only where the expression opens on one; the
+value stays case-sensitive, `JSESSIONID` and `jsessionid` naming two
+different cookies. An expression reaching a header name some other way —
+after a `\n`, behind a `(?s).*` — is left alone and is worth widening by
+hand when it stops matching.
+
+The same trap reaches anything else copied from a recorded header block:
+a `ResponseAssertion` on `content-type: application/json`, a correlation
+rule you write from a recorded exchange. Read the case as the recording's
+protocol, never as the server's.
 
 **Failing on a missed extraction.** NeoLoad fails a request whose
 extraction finds nothing, which is a tick box on the extractor
@@ -1012,6 +1097,22 @@ here. The imported requests then ask for `${username}` while the variable
 offers `${col_0}`, which is faithful rather than wrong. Rename the columns
 on the OctoPerf variable, or fix the source and import again; do not
 rewrite the requests to the `col_*` names, which says nothing to a reader.
+
+**Comment lines in a generated data file.** A CSV file NeoLoad wrote
+itself, from a recording, opens on `#` comment lines naming what it holds:
+
+```
+#Accounts file generated by NeoLoad from record
+# login ; password
+j2ee;secret
+```
+
+JMeter reads those as data rows, so the first Virtual Users sign in as
+`#Accounts file generated by NeoLoad from record`. `sanity_check_virtual_user`
+catches it — `1 lines in file 'accounts.csv' have inconsistent column
+counts` — so run it and read the count as lines to drop. Delete the comment
+lines from the file and re-upload with `upload_project_file`; leaving
+`ignoreFirstLine` to do it only ever skips one.
 
 **Column counts.** `sanity_check_virtual_user` may report
 `N lines in file 'X.csv' have inconsistent column counts (expected: 13)`
