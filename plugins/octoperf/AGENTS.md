@@ -166,7 +166,7 @@ Imports split in two shapes:
 
 | Tool                              | Shape    | Source                                                                                   |
 |-----------------------------------|----------|------------------------------------------------------------------------------------------|
-| `import_har_virtual_user`         | upload   | HAR capture                                                                              |
+| `import_har_virtual_user`         | upload   | HAR capture; a `containerTimeline` part names the containers                             |
 | `import_postman_virtual_user`     | upload   | Postman v2.1 JSON                                                                        |
 | `import_playwright_virtual_user`  | upload   | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
 | `upload_jmx_virtual_user`         | upload   | JMeter `.jmx` (creates one or more VUs)                                                  |
@@ -174,12 +174,17 @@ Imports split in two shapes:
 | `import_neoload_virtual_user`     | upload   | NeoLoad project folder or its `config.zip` (VUs + servers + variables + scenarios)       |
 | `analyze_loadrunner_project`      | upload   | Zipped VuGen script folder → portability assessment, writes nothing. Ship `data/` with it |
 | `import_loadrunner_virtual_user`  | upload   | Zipped VuGen script folder + its `.lrs` (VUs + servers + variables + `.dat` + scenarios)  |
+| BlazeMeter tests                  | agent    | No import tool — you call the BlazeMeter API yourself, then reuse `upload_jmx_virtual_user` / `upload_project_file`. Read `octoperf://skills/blazemeter-migration` |
 | `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU                                                                       |
 | `import_webdriver_virtual_user`   | in-proc  | URL list → browser VU                                                                    |
 | `update_virtual_user`             | —        | Edit metadata (name/description/tags); tree untouched                                    |
 | `backup_virtual_user`             | —        | Duplicate a VU + tag it `backup` before a risky change (no VU versioning in OctoPerf)    |
 | `patch_virtual_user`              | —        | Edit the action tree via RFC 6902 JSON Patch                                             |
 | `delete_virtual_user`             | —        | **Destructive** — drops the tree                                                         |
+
+**Read `octoperf://skills/har-recording` before recording browser traffic or
+importing a HAR** — without a `containerTimeline` the whole capture lands in a
+single container.
 
 **Read `octoperf://skills/neoload-migration` before importing a NeoLoad
 project, and `octoperf://skills/loadrunner-migration` before importing a
@@ -378,6 +383,7 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `create_trend_report_by_creation_date` | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                                                                                                                                              |
 | `create_comparison_report`             | COMPARISON report over 2 to 4 finished runs of one project — the backend lays out the report items with one metric per run. `benchResultIds` is the column order; optional `names` labels the columns instead of the automatic Run A / B / C / D. Static list: adding a run means another report. |
 | `export_bench_report_pdf`              | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
+| `import_jtl_report`                    | Build a report out of JMeter result files the user ran themselves. Mints a presigned URL to POST a `.zip` of CSV JTL files to — up to 200 MB, the bytes bypass the MCP server. The POST stores the archive *and* starts the import: it answers `{taskId, benchResultId, reportName}`, so poll `get_task_result`, then find the report with `list_bench_reports_by_project`. **Read `octoperf://skills/jtl-import` before zipping.** |
 | `get_report_data_status`               | Whether the report's runs hold their data in the format report queries read — sorts them into `upToDate` / `needsUpdate` / `updating` / `unknown`. A run in the previous format answers every metric query empty, so the value tools refuse rather than return zeros.             |
 | `update_report_data`                   | **Destructive** — rewrites a run's stored data into the current format so the report becomes readable. One async `taskId` per run to poll with `get_task_result`. Ask the user first: it can take minutes on a large run. See `octoperf://skills/bench-reports`.                  |
 
@@ -505,8 +511,11 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/notifications`              | `text/markdown` | Playbook: manage workspace notifications — pick channel (email/Slack/Teams/Google Chat/Webex/HTTP/JIRA) → events → filters → test; write-only secrets, resend on update; JIRA multi-step lookup flow                                             |
 | `octoperf://skills/monitoring`                 | `text/markdown` | Playbook: monitor servers during a run — pick an UP agent that reaches the target, create a monitor per type, then configure counters/applications (create-then-configure: `list_monitor_applications` → `preview_monitor_counters` → `update_monitor_counters`, select by path or `"*"` pattern); synchronous connection check; the self-contained SLA monitor |
 | `octoperf://skills/scenario-composition`      | `text/markdown` | Playbook: build or reshape a scenario's userProfiles — the four load shapes and their millisecond fields, one engine per VU type, setUp/tearDown as profile settings, create-then-patch; plus **Pass Criteria** — what says the run passed, why none of it is stored on the scenario, and the derivation that reads the ones a test already has |
+| `octoperf://skills/blazemeter-migration`       | `text/markdown` | Playbook: migrate BlazeMeter tests — **you** call the BlazeMeter API with the user's own keys (OctoPerf servers never do, and never receive one), inventory the account and give a per-`scriptType` verdict before writing anything, bring the JMeter and Taurus tests across with their data files, turn each test's `executions` load profile into a scenario, and report what has no equivalent (Gatling/Locust/Selenium scripts, multi-tests, mock services, thresholds) |
 | `octoperf://skills/loadrunner-migration`       | `text/markdown` | Playbook: migrate a LoadRunner VuGen script and its Controller scenario — read the portability verdict before committing (a script can be `QTWeb` and send nothing at all: its calls are C), import, then work the `unconverted` list kind by kind (hand-written C, conditions reading C locals, recorded cookies, parameterised servers, loop bounds, load generators, the pace between iterations, the parameters and dates a script writes, the credentials on a server, the SLA profiles to attach, the emulated network a group sat on). **Mandatory before importing**: the entries say what happened, the skill says what to do |
 | `octoperf://skills/neoload-migration`          | `text/markdown` | Playbook: migrate a NeoLoad project — read the portability verdict before committing, import, then work the `unconverted` list kind by kind (plugin dialogs, NeoLoad JavaScript, try/catch, waits, pushed and played requests, SOAP envelopes, container draws, monitors, SLA profiles). **Mandatory before importing**: the entries say what happened, the skill says what to do |
+| `octoperf://skills/har-recording`              | `text/markdown` | Playbook: build a VU from real browser traffic — drive the recording with Playwright and emit its container timeline (both automatic container strategies collapse on a scripted capture), `content: 'embed'` never `'attach'`, POST the HAR and the timeline as two parts; plus what to tell a user recording by hand in Firefox / Chrome / Fiddler / Charles |
+| `octoperf://skills/jtl-import`                 | `text/markdown` | Playbook: turn JMeter result files into an OctoPerf report — the `.zip`-of-CSV rule and the ten mandatory columns, the two default JMeter settings that pass the check and still ruin the report (date `timestamp_format`, `sample_count=false` so an uncaught 500 imports as a success), one JTL per thread group, and what the report cannot hold |
 | `octoperf://skills/sla`                        | `text/markdown` | Playbook: Design SLA profiles — separating them from `create_sla_monitor`, the threshold-group model (severity, OPEN/CLOSED range bounds, occurrence-count vs millisecond hold), create-then-patch with sourced defaults, JSON Patch recipes, and the attach step without which nothing fires |
 
 ### JSON Schemas (mandatory before any `patch_*`)
@@ -575,6 +584,8 @@ MCP skill resource via `resources/read` — the server publishes them at
 | `octoperf://skills/scenario-diagnosis` | A scenario run produced bad / failing metrics and the user wants to know why (workflow 5)                                                    |
 | `octoperf://skills/sla`                | Creating or editing an SLA profile, or explaining which SLA band a run breached                                                               |
 | `octoperf://skills/async-polling`      | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
+| `octoperf://skills/har-recording`      | About to record browser traffic, or to import a HAR someone recorded                                                                        |
+| `octoperf://skills/jtl-import`         | About to import JMeter JTL result files rather than run a test                                                                              |
 
 ### 1. Import → validate → fix → run
 
