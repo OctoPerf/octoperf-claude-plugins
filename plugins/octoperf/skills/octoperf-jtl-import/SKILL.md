@@ -36,9 +36,9 @@ so a plain `jmeter -n -t plan.jmx -l results.jtl` is enough. Read the
 header line anyway and name what is missing — it is faster than a failed
 import.
 
-## 2. The two settings that quietly ruin a report
+## 2. The setting that quietly ruins a report
 
-Both pass the mandatory-column check. Neither is visible in the result.
+It passes the mandatory-column check and is not visible in the result.
 
 **`timestamp_format` set to a date pattern.** OctoPerf reads `timeStamp`
 as epoch milliseconds. JMeter's default is `ms`, but
@@ -48,20 +48,24 @@ that teams enable to make the file readable by eye. With it, the import
 fails on the first line. Check that the first data row's `timeStamp` is
 a long, not a date.
 
-**`sample_count` left at its default `false`.** This is the one that
-costs the most, because nothing about it looks wrong. OctoPerf counts a
-sample as failed when `ErrorCount` is above zero **or** when
-`failureMessage` is non-empty — it never reads JMeter's `success`
-column. `ErrorCount` is only written when
-`jmeter.save.saveservice.sample_count=true`, which is off by default.
-So on a default JTL, an HTTP 500 that no assertion caught is imported
-as a **success**, and the report shows a 0% error rate over a run that
-failed.
+### How errors are counted
 
-Tell the user before importing. Either re-run with
-`-Jjmeter.save.saveservice.sample_count=true`, or accept that only
-assertion failures will show — and say which of the two the report they
-are about to read reflects.
+A sample counts as failed on the strongest of three signals, whichever
+the file carries: `ErrorCount` above zero, `success` equal to `false`,
+or a non-empty `failureMessage`. `success` is written by default, so a
+plain `jmeter -n -t plan.jmx -l results.jtl` reports its errors
+correctly even with no assertion in the plan.
+
+Two consequences worth stating to the user:
+
+- **A run with no failure signal at all reports 0% errors, correctly.**
+  If someone disabled `jmeter.save.saveservice.successful`, the file
+  carries no per-sample verdict and only assertion failures show.
+  Check the header for `success` when an error rate looks too clean.
+- **`success` is JMeter's verdict, not the HTTP status.** A Response
+  Assertion or an "Ignore Status" checkbox that accepts a 4xx keeps the
+  sample green here too, which is what the test author asked for.
+  *Response Codes Over Time* still shows the raw codes.
 
 ## 3. Zip it
 
@@ -128,6 +132,11 @@ expectations before the user goes looking:
   are rebuilt from labels; a row whose `URL` is the literal `null` is
   read as a container, which is how transaction controllers reappear.
   Treat the tree as a reading aid, not as a script to re-run.
+- **Error details are sampled, the error rate is not.** *Errors %* and
+  the error graphs count every failed sample, but the errors table keeps
+  at most three detail records per action, so a request that failed
+  hundreds of times shows three examples. A gap between the two is
+  expected, not a contradiction.
 - **The user load is inferred from `allThreads`** and simplified — the
   curve keeps its shape, not its every point, and it has no data for
   the ramp-up before the first sample or after the last one.

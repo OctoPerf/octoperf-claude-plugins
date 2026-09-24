@@ -1,6 +1,6 @@
 ---
 name: octoperf-export-bench-report-pdf
-description: Use when the user asks to "export the report as PDF", "print the bench report", "get a PDF of report X", "share a PDF with stakeholders", or any variation that calls for a static artefact of an OctoPerf benchReport. Walks the LLM through the three-step async chain (submit print task → poll → download presigned URL). Requires the OctoPerf MCP server to be connected.
+description: Use when the user asks to "export the report as PDF", "print the bench report", "get a PDF of report X", "export these reports", "share a PDF with stakeholders", or any variation that calls for a static artefact of one or several OctoPerf benchReports. Walks the LLM through the three-step async chain (submit print task → poll → download presigned URL), for a single report and for a batch. Requires the OctoPerf MCP server to be connected.
 ---
 
 # OctoPerf — Export a benchReport as PDF
@@ -33,13 +33,28 @@ value tools (`get_report_summary_values`, `get_report_table_values`,
 ### 1. Submit the print task
 
 ```
-export_bench_report_pdf(benchReportId)
+export_bench_report_pdf(benchReportId, locale?, timezone?)
 # returns { benchReportId, taskId }
 ```
 
-The tool returns immediately with a `taskId`. Defaults are sensible
-(portrait A4, empty cover page, en-US locale, UTC timezone) — no extra
-parameters needed for the common case.
+The tool returns immediately with a `taskId`.
+
+**The layout is the report's own, not the caller's.** Each report
+carries an `ExportReportConfig` — orientation, page format, margins,
+scale, cover page, table row counts — edited in the UI under
+`Report configuration > Print`, and the print reuses it as it stands.
+No parameter overrides it. A report that was never configured prints
+with the UI defaults: landscape A4, scale 0.8, the standard cover page.
+To give several reports one layout, save it in a report template and
+`apply_report_template` it to them — a template carries an
+`ExportReportConfig` like any other report config.
+
+**`locale` and `timezone` are what the caller does decide.** They set
+the browser context the page is rendered in: `locale` (BCP-47, e.g.
+`fr-FR`) drives how numbers and dates are formatted, `timezone` (IANA
+id, e.g. `Europe/Paris`) which zone the timestamps are read in. They
+default to `en-US` / `UTC`, so a PDF printed for a user elsewhere shows
+hours they do not recognise — pass theirs whenever you know them.
 
 ### 2. Poll until the task settles
 
@@ -82,6 +97,28 @@ Hand `url` to the user. The single-use token is consumed on the first
 GET and the URL expires in ~5 minutes — re-call
 `download_bench_result_file` if the user needs a fresh link.
 
+## Several reports at once
+
+Printing is sequential and each render costs a browser, so a batch goes
+through one task rather than N:
+
+```
+export_bench_reports_pdf(benchReportIds, locale?, timezone?)
+# returns { benchReportIds, taskId } — refuses past the server's cap (20 by default)
+
+get_task_result(taskId)
+# PARTIAL means some reports printed and others failed
+
+download_bench_report_pdfs(benchReportIds)
+# one presigned URL, one zip, all the PDFs
+```
+
+Everything above still holds per report: each one comes out with its
+own layout, so a batch of differently-configured reports is a zip of
+differently-looking PDFs. `locale` and `timezone` are the batch's only
+shared setting. Allow roughly half a minute per report before the task
+settles, and read `octoperf-async-polling` for the cadence.
+
 ## Gotchas
 
 - **TREND / COMPARISON reports**: the PDF is attached to the
@@ -90,6 +127,10 @@ GET and the URL expires in ~5 minutes — re-call
 - **Re-exporting**: re-running `export_bench_report_pdf` produces a
   new file with the same sanitized filename — the previous PDF is
   overwritten on the storage layer.
+- **The zip holds what was printed, not what was asked.** A report of
+  the batch whose print failed is simply absent from the archive of
+  `download_bench_report_pdfs` — name the missing ones to the user
+  rather than letting them count the files.
 - **Filename collisions**: two reports with the same name (after
   `\W+ → _` sanitisation) would land on the same filename if they
   share a benchResult. In practice reports rarely share a benchResult

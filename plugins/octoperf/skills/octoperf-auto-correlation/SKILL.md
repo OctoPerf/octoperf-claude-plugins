@@ -217,12 +217,19 @@ captured value should reappear in subsequent requests) to one of:
 Multiple targets are valid: a JSESSIONID that's URL-rewritten **and**
 echoed in `Referer` headers needs `["PATH", "HEADER"]`.
 
-Then re-walk the VU to apply the new rule:
+Then re-walk the VU to apply the new rule — and only that one, so the
+rules already in place are not recomputed and a broken rule written by
+someone else cannot get in the way:
 
 ```
-mcp__octoperf__apply_correlations_to_virtual_user(projectId, virtualUserId)
+mcp__octoperf__apply_correlations_to_virtual_user(virtualUserId, correlationRuleIds=[ruleId])
 mcp__octoperf__get_task_result(taskId)  # poll — see octoperf-async-polling (3s cadence)
 ```
+
+`correlationRuleIds` takes any subset of the ids `list_correlation_rules`
+returns; omit it to run every rule of the project. A disabled rule is
+skipped even when listed, as it is when every rule runs. An id that
+matches no rule of the project fails the task and names the unknown ids.
 
 Before burning a validation cycle, optionally confirm the rule
 actually matched by reading the VU tree and grepping for

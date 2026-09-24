@@ -17,9 +17,10 @@ This repo distributes one plugin (`octoperf`) that:
 
 - registers the hosted **OctoPerf MCP server** (`https://api.octoperf.com/mcp`,
   Streamable HTTP, OAuth 2.1 + PKCE + DCR — no API key);
-- installs eight workflow **skills** that drive the MCP tools end-to-end
-  (auto-correlation, validation triage, scenario diagnosis, bench-report
-  reading, PDF export, real-browser probe, scheduling, async polling);
+- installs twenty workflow **skills** that drive the MCP tools end-to-end
+  (recording & import, migration from BlazeMeter / LoadRunner / NeoLoad,
+  correlation, validation, scenario composition, SLAs, monitoring, bench
+  reports, scheduling, notifications, on-premise agents, workspaces…);
 - ships an `AGENTS.md` reference describing every MCP tool the server
   exposes.
 
@@ -43,16 +44,28 @@ Revoke at any time from **Account → Connected applications** on OctoPerf.
 
 ## Skills
 
-| Skill                              | Triggers on                                                            |
-|------------------------------------|------------------------------------------------------------------------|
-| `octoperf-auto-correlation`        | "correlate the VU", "fix replay errors", "401/403 on replay"           |
-| `octoperf-validation-triage`       | "the validation is red", "lots of errors after import"                 |
-| `octoperf-scenario-diagnosis`      | "the load test failed", "why are response times so high"               |
-| `octoperf-bench-reports`           | "what's the right tool for this widget", widget metric questions       |
-| `octoperf-export-bench-report-pdf` | "export the report as PDF", "print the bench report", "share a PDF"    |
-| `octoperf-real-browser-probe`      | "EUM probe", "Playwright probe", "TruClient equivalent"                |
-| `octoperf-scheduling`              | "schedule the scenario", "run every weekday at 8am"                    |
-| `octoperf-async-polling`           | invoked automatically by any skill that has to poll a `taskId` result  |
+| Skill                              | Triggers on                                                           |
+|------------------------------------|-----------------------------------------------------------------------|
+| `octoperf-har-recording`           | "record my application", "capture a HAR", "import this .har"          |
+| `octoperf-jtl-import`              | "import my JTL", "analyse these JMeter results"                       |
+| `octoperf-blazemeter-migration`    | "migrate from BlazeMeter", "convert my Taurus test"                   |
+| `octoperf-loadrunner-migration`    | "migrate from LoadRunner", "convert a .usr script"                    |
+| `octoperf-neoload-migration`       | "migrate from NeoLoad", "convert a .nlp project"                      |
+| `octoperf-auto-correlation`        | "correlate the VU", "fix replay errors", "401/403 on replay"          |
+| `octoperf-validation-triage`       | "the validation is red", "lots of errors after import"                |
+| `octoperf-scenario-composition`    | "build a scenario", "ramp-up / load shape", "user profiles"           |
+| `octoperf-sla`                     | "define an SLA", "fail the test if response time > X"                 |
+| `octoperf-monitoring`              | "monitor my servers during the test", "add a database monitor"        |
+| `octoperf-scenario-diagnosis`      | "the load test failed", "why are response times so high"              |
+| `octoperf-bench-reports`           | "what's the right tool for this widget", widget metric questions      |
+| `octoperf-report-item-editing`     | "change the metrics of this report widget", "add a filter"            |
+| `octoperf-export-bench-report-pdf` | "export the report as PDF", "print the bench report"                  |
+| `octoperf-real-browser-probe`      | "EUM probe", "Playwright probe", "TruClient equivalent"               |
+| `octoperf-scheduling`              | "schedule the scenario", "run every weekday at 8am"                   |
+| `octoperf-notifications`           | "notify Slack when a test fails", "open a JIRA ticket on failure"     |
+| `octoperf-onpremise-agent`         | "run from my own machines", "install an on-premise agent"             |
+| `octoperf-workspace`               | "add someone to the workspace", "change member permissions"           |
+| `octoperf-async-polling`           | invoked automatically by any skill that has to poll a `taskId` result |
 
 
 ## Other clients

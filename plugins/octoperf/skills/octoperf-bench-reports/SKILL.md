@@ -361,6 +361,14 @@ the Report Templates page edits. Where presentation lives:
   own `configs`, e.g. `/items/2/metrics/1/configs/-` with
   `{"@type":"SingleColorReportConfig","color":"#CC5500"}`;
 - **a metric's Apdex** — an `ApdexReportConfig` in the same place;
+- **a metric's Y axis** — an `AxisReportConfig` in the same place, e.g.
+  `{"@type":"AxisReportConfig","scale":"LOGARITHMIC","dedicated":true}`.
+  `scale` is `LINEAR` or `LOGARITHMIC` (`LINEAR` when absent); `dedicated:
+  true` takes the metric off the axis it shares with the metrics of its
+  unit and gives it one of its own. The scale belongs to the axis but is
+  stored per metric: write the same `scale` on every metric of one axis.
+  Only line charts, unstacked bar charts and percentiles charts draw it,
+  every other report item ignores it;
 - **the template-wide settings** — the root `/configs`.
 
 Two things it will not do. It refuses a patch that changes `id` or
