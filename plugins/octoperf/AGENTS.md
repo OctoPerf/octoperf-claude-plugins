@@ -43,7 +43,7 @@ Revoke at any time from **Account → Connected applications** on OctoPerf UI.
 
 Tools that move file bytes — `upload_project_file`,
 `download_project_file`, `download_bench_result_file`, the PDF leg of
-`export_bench_report_pdf`, every `import_*_virtual_user` /
+`export_bench_report_pdf` and `download_bench_report_pdfs`, every `import_*_virtual_user` /
 `upload_jmx_virtual_user` that consumes a file (HAR, JMX, Postman,
 Playwright), and any Playwright trace / HAR / JTL pull — return a
 short-lived **presigned URL** pointing at the OctoPerf REST API (same
@@ -256,7 +256,7 @@ server-side.
 | `list_correlation_rules`               | Project-defined regex rules                                            |
 | `create_correlation_rule`              | New regex rule                                                         |
 | `delete_correlation_rule`              | **Destructive**                                                        |
-| `apply_correlations_to_virtual_user`   | Async re-walk the VU and rewrite extractors/usages — returns a task id |
+| `apply_correlations_to_virtual_user`   | Async re-walk the VU and rewrite extractors/usages, every rule or only `correlationRuleIds` — returns a task id |
 
 ### Design SLA profiles
 
@@ -382,7 +382,9 @@ Monitors watch an external target (OS / DB / web-server / JMX / Prometheus / New
 | `create_trend_report_by_name`          | TREND report anchored on one benchResult, other points picked by scenario-name match (EQUALS / CONTAINS / STARTS_WITH / ENDS_WITH, case-sensitive or not)                                                                                                                       |
 | `create_trend_report_by_creation_date` | TREND report anchored on one benchResult, other points picked by created-at window (fromMs / toMs epoch-ms, either bound optional)                                                                                                                                              |
 | `create_comparison_report`             | COMPARISON report over 2 to 4 finished runs of one project — the backend lays out the report items with one metric per run. `benchResultIds` is the column order; optional `names` labels the columns instead of the automatic Run A / B / C / D. Static list: adding a run means another report. |
-| `export_bench_report_pdf`              | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. |
+| `export_bench_report_pdf`              | Submit an async task that renders the report as a PDF (headless Playwright print). Returns a `taskId` to poll with `get_task_result`; on SUCCESS, the PDF is attached to the report's first benchResult — pull it via `list_bench_result_files` + `download_bench_result_file`. The layout is the report's own saved export config, not a parameter; optional `locale` / `timezone` decide how the page formats its numbers and timestamps (en-US / UTC otherwise). |
+| `export_bench_reports_pdf`             | Same print, batched: ONE task renders several reports one after the other, up to the server's cap. Each report keeps its own layout, `locale` / `timezone` hold for the whole batch. `PARTIAL` on `get_task_result` means some reports failed. Prefer it over a loop of `export_bench_report_pdf`. |
+| `download_bench_report_pdfs`           | Mint one presigned GET URL (single-use, ~5 min) pulling the PDFs printed for several reports as a single zip. A report with no printed PDF is absent from the archive; 404 when none has one. |
 | `import_jtl_report`                    | Build a report out of JMeter result files the user ran themselves. Mints a presigned URL to POST a `.zip` of CSV JTL files to — up to 200 MB, the bytes bypass the MCP server. The POST stores the archive *and* starts the import: it answers `{taskId, benchResultId, reportName}`, so poll `get_task_result`, then find the report with `list_bench_reports_by_project`. **Read `octoperf://skills/jtl-import` before zipping.** |
 | `get_report_data_status`               | Whether the report's runs hold their data in the format report queries read — sorts them into `upToDate` / `needsUpdate` / `updating` / `unknown`. A run in the previous format answers every metric query empty, so the value tools refuse rather than return zeros.             |
 | `update_report_data`                   | **Destructive** — rewrites a run's stored data into the current format so the report becomes readable. One async `taskId` per run to poll with `get_task_result`. Ask the user first: it can take minutes on a large run. See `octoperf://skills/bench-reports`.                  |
@@ -606,7 +608,7 @@ captured during recording are stale on the next run. Use this recipe:
 1. Validate the VU; confirm failures look like correlation issues (`401`, `403`, signature mismatches, server-side state errors).
 2. `list_correlation_frameworks` → pick the framework matching the target stack (SAML / OAuth / Token / …).
 3. `add_correlation_framework_to_project` → submits an async task; poll with `get_task_result`.
-4. Re-validate. For values the preset doesn't catch, write a regex rule with `create_correlation_rule`, then `apply_correlations_to_virtual_user`.
+4. Re-validate. For values the preset doesn't catch, write a regex rule with `create_correlation_rule`, then `apply_correlations_to_virtual_user` with that rule's id in `correlationRuleIds`.
 
 ### 3. Triage validation failures across a VU
 

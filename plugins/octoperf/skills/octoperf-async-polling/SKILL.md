@@ -21,6 +21,7 @@ You started one of:
 | `validate_virtual_user`                            | `benchResultId`                       | `get_virtual_user_validation` (or `get_bench_result`)     |
 | `run_scenario`                                     | `benchReportId` + `benchResultIds[]`  | `get_bench_result` (state) and/or `get_bench_status` (%)  |
 | `export_bench_report_pdf`                          | `taskId`                              | `get_task_result`                                         |
+| `export_bench_reports_pdf`                         | one `taskId` for the whole batch      | `get_task_result` (`PARTIAL` = some reports failed)       |
 | `update_report_data`                               | one `taskId` per run to update        | `get_task_result`                                         |
 | Async correlation task (auto-correlate workflow)   | `taskId`                              | `get_task_result`                                         |
 

@@ -1,7 +1,7 @@
 {
   "name": "octoperf",
-  "version": "0.1.0",
-  "description": "OctoPerf load-testing platform — connects to the hosted MCP server (HTTP + OAuth 2.1 PKCE + DCR) and bundles workflow skills (auto-correlation, validation triage, scenario diagnosis, bench reports, real-browser probe, scheduling).",
+  "version": "0.2.0",
+  "description": "OctoPerf load-testing platform — connects to the hosted MCP server (HTTP + OAuth 2.1 PKCE + DCR) and bundles workflow skills (recording & import, BlazeMeter/LoadRunner/NeoLoad migration, correlation, validation, scenario composition, SLAs, monitoring, bench reports, scheduling, notifications, on-premise agents).",
   "author": {
     "name": "OctoPerf",
     "email": "support@octoperf.com",
