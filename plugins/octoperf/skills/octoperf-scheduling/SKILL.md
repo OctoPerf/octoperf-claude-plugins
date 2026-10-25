@@ -59,11 +59,13 @@ unambiguous.
 
 ### 3. Pre-flight FIRST — a misconfigured cron fires failing runs forever
 
-Before `schedule_scenario_*`, call `get_scenario_matching_plans` on
-the scenario. If it returns an empty list, the scheduled run will
-fail at startup *every single fire* until someone notices and disables the job.
+Before `schedule_scenario_*`, call `sanity_check_scenario`, then
+`get_scenario_matching_plans` on the scenario. A scenario with an
+ERROR in the sanity check, or with no matching plan, fails *every
+single fire* until someone notices and disables the job.
 
 ```
+mcp__octoperf__sanity_check_scenario(scenarioId)          # fix every ERROR first
 mcp__octoperf__get_scenario_matching_plans(scenarioId)
 ```
 
@@ -107,6 +109,7 @@ For recurring:
 ### 3. Pre-flight + schedule
 
 ```
+mcp__octoperf__sanity_check_scenario(scenarioId)          # MUST have no ERROR
 mcp__octoperf__get_scenario_matching_plans(scenarioId)   # MUST be non-empty
 mcp__octoperf__schedule_scenario_once(scenarioId, runAt, name)
 # or
@@ -162,4 +165,4 @@ in `list_bench_reports_by_project` like a real run. To audit:
 ## See also
 
 - `octoperf-scenario-diagnosis` — when a scheduled run produced bad metrics or errored before sampling.
-- OctoPerf scheduler docs: <https://doc.octoperf.com/runtime/scheduler/>
+- OctoPerf scheduler docs: <https://api.octoperf.com/doc/runtime/scheduler/>

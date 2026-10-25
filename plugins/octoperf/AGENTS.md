@@ -6,7 +6,7 @@ Drop it at your project root and your agent will pick it up automatically.
 
 OctoPerf is a load-testing platform. The MCP server exposes its REST API
 as MCP tools so an agent can: import Virtual Users (HAR / JMX / Postman /
-Playwright / WebDriver / URLs), edit them (variables, HTTP
+Playwright / K6 / WebDriver / URLs), edit them (variables, HTTP
 servers, correlation rules), validate them functionally, run load
 scenarios, and read back metrics — all without leaving the chat.
 
@@ -16,7 +16,7 @@ The server speaks OAuth 2.1 + PKCE + DCR. There is **no API key**; every
 tool call carries a short-lived JWT minted from your user identity.
 
 **Claude Code — quickest path: the official plugin.** It bundles the MCP
-server registration, this `AGENTS.md`, and the sixteen workflow skills in
+server registration, this `AGENTS.md`, and the twenty-one workflow skills in
 one install:
 
 ```text
@@ -42,8 +42,8 @@ Revoke at any time from **Account → Connected applications** on OctoPerf UI.
 ### Claude.ai web: allow the OctoPerf host for presigned URLs
 
 Tools that move file bytes — `upload_project_file`,
-`download_project_file`, `download_bench_result_file`, the PDF leg of
-`export_bench_report_pdf` and `download_bench_report_pdfs`, every `import_*_virtual_user` /
+`download_project_file`, `download_bench_result_file`, `export_virtual_user`, the PDF
+leg of `export_bench_report_pdf` and `download_bench_report_pdfs`, every `import_*_virtual_user` /
 `upload_jmx_virtual_user` that consumes a file (HAR, JMX, Postman,
 Playwright), and any Playwright trace / HAR / JTL pull — return a
 short-lived **presigned URL** pointing at the OctoPerf REST API (same
@@ -85,8 +85,8 @@ attempt it.
 | `list_projects_by_workspace`          | DESIGN projects in a workspace                         |
 | `list_scenarios_by_project`           | STANDARD-mode scenarios of a project                   |
 | `list_virtual_users`                  | Virtual Users (VUs) of a project                       |
-| `list_docker_providers_by_workspace`  | Load-generator providers of the workspace (id, type, driver, locations)  |
-| `list_public_docker_providers`        | Shared OctoPerf Cloud providers                        |
+| `list_docker_providers_by_workspace`  | The workspace's own providers (id, type, driver, locations), not the public ones |
+| `list_public_docker_providers`        | Public providers every workspace can run on            |
 
 ### Workspace & project
 
@@ -131,8 +131,8 @@ must **not** be the machine hosting that app. Read
 | `update_provider_location`        | Rename / move a location — **renaming orphans its agents** (returns `orphanedAgents`)        |
 | `remove_provider_location`        | **Destructive** — drop a location; its agents are orphaned                                   |
 | `get_onpremise_agent_command`     | The `docker run` command to install an agent on a machine for a provider location           |
-| `list_provider_agents`            | Agents of a provider (state, host) + duplicate-on-host detection + per-agent uninstall cmd   |
-| `get_provider_usage`              | Current capacity & load per location (agents + memory in use) + per-machine memory config    |
+| `list_provider_agents`            | Agents of a provider (state, host) + per-agent uninstall command                            |
+| `sanity_check_provider`           | Agents sharing a machine, memory per agent declared too low, vs the workspace's providers   |
 
 ### Virtual User — read & inspect
 
@@ -141,7 +141,7 @@ must **not** be the machine hosting that app. Read
 | `get_virtual_user`                         | Full action tree (heavy — polymorphic children, headers, postData, …)   |
 | `describe_virtual_user`                    | Compact `VirtualUserListing` (id, name, tags, timestamps, `url` deep-link) — chain after a presigned import to surface the UI link |
 | `sanity_check_virtual_user`                | Static design checks — non-destructive, no credit cost                  |
-| `get_virtual_user_validation_index`        | Per-action validation failure summary                                   |
+| `get_virtual_user_validation_index`        | Runs per action, in tree order, each named as the UI names it           |
 | `get_validation_failure_detail`            | The four HTTP entities of one failing action (sent/recv request/response) |
 | `fetch_validation_http_body`               | Pull a single HTTP body recorded during validation                      |
 | `get_virtual_user_validation`              | Latest validation run state on a VU                                     |
@@ -152,39 +152,66 @@ Imports split in two shapes:
 
 - **File-backed imports** (`import_har_virtual_user`,
   `import_postman_virtual_user`, `import_playwright_virtual_user`,
-  `upload_jmx_virtual_user`) mint a short-lived presigned upload URL.
+  `import_k6_virtual_user`, `upload_jmx_virtual_user`) mint a short-lived
+  presigned upload URL.
   The client POSTs the file directly to the OctoPerf REST host (bypassing
   the MCP server for the bytes); the REST response is a raw
-  `VirtualUser` (HAR / Postman / Playwright) or a Virtual User Action
-  array (JMX), neither of which carries a `url` deep-link. **Always
+  `VirtualUser` (HAR / Postman / Playwright / K6) or an array of Virtual
+  Users (JMX), neither of which carries a `url` deep-link. **Always
   chain into `describe_virtual_user`** with each returned `id` to obtain
   the compact listing and the link to the Virtual User page.
 - **In-process imports** (`import_urls_virtual_user`,
   `import_webdriver_virtual_user`) accept their input as a tool
-  parameter (URL list) and return a `VirtualUserListing` directly —
-  no follow-up call needed.
+  parameter (URL list) and both answer directly with
+  `{virtualUser, requests}` — no follow-up call needed: the listing
+  under `virtualUser` (its `id`, `url`…) and `requests`, how many HTTP
+  requests (URL list, crawled links included) or navigation steps
+  (WebDriver) the import created.
+
+Every import names a new Virtual User after its source — the host of
+the first URL, the spec or script file, the collection, the project's
+own names — and numbers it (`shop (2)`) when the project already holds
+that name: two Virtual Users sharing a name merge their samples in test
+results. `import_urls_virtual_user`, `import_webdriver_virtual_user` and
+`import_playwright_virtual_user` also take an optional `name`, kept as
+given; there is no need to rename a Virtual User after importing it.
 
 | Tool                              | Shape    | Source                                                                                   |
 |-----------------------------------|----------|------------------------------------------------------------------------------------------|
 | `import_har_virtual_user`         | upload   | HAR capture; a `containerTimeline` part names the containers                             |
 | `import_postman_virtual_user`     | upload   | Postman v2.1 JSON                                                                        |
-| `import_playwright_virtual_user`  | upload   | Single `.spec.ts` file; add helpers / `package.json` afterwards via `patch_virtual_user` |
+| `import_playwright_virtual_user`  | upload   | Single `.spec.ts` file, named after it; add helpers / `package.json` afterwards via `patch_virtual_user` |
+| `import_k6_virtual_user`          | upload   | One `files` part per `.js` / `.ts` source, named as the scripts import them. Read `octoperf://skills/k6-scripting` **before writing the scripts** — the project's variables reach them through `__ENV` and a generated `./octoperf.js`, and `octoperf.js` / `__octoperf_*` are reserved names |
 | `upload_jmx_virtual_user`         | upload   | JMeter `.jmx` (creates one or more VUs)                                                  |
 | `analyze_neoload_project`         | upload   | NeoLoad archive → portability assessment, writes nothing. Run it **before** importing    |
 | `import_neoload_virtual_user`     | upload   | NeoLoad project folder or its `config.zip` (VUs + servers + variables + scenarios)       |
 | `analyze_loadrunner_project`      | upload   | Zipped VuGen script folder → portability assessment, writes nothing. Ship `data/` with it |
 | `import_loadrunner_virtual_user`  | upload   | Zipped VuGen script folder + its `.lrs` (VUs + servers + variables + `.dat` + scenarios)  |
+| `analyze_gatling_project`         | upload   | Zipped Gatling project (Java, Scala or Kotlin simulations) → what converts to a K6 Virtual User, writes nothing |
 | BlazeMeter tests                  | agent    | No import tool — you call the BlazeMeter API yourself, then reuse `upload_jmx_virtual_user` / `upload_project_file`. Read `octoperf://skills/blazemeter-migration` |
-| `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU                                                                       |
+| `import_urls_virtual_user`        | in-proc  | URL list → HTTP VU; `CRAWL` (default) adds each page's same-host `<a href>` links, one level, 20 per URL — never images, CSS or scripts |
 | `import_webdriver_virtual_user`   | in-proc  | URL list → browser VU                                                                    |
 | `update_virtual_user`             | —        | Edit metadata (name/description/tags); tree untouched                                    |
 | `backup_virtual_user`             | —        | Duplicate a VU + tag it `backup` before a risky change (no VU versioning in OctoPerf)    |
+| `export_virtual_user`             | download | The VU in its original format, as a ZIP that runs locally as is — the quickest way to reproduce or debug outside OctoPerf: the generated `.jmx` + every project file in `resources/`, as on a load generator (`jmeter -n -t`, one iteration of one user, secrets as `-JNAME=value`), the Playwright files (`npx playwright test`), or a K6 folder (`k6 run`, local `octoperf.js` + the CSV files). Secrets are never exported |
 | `patch_virtual_user`              | —        | Edit the action tree via RFC 6902 JSON Patch                                             |
 | `delete_virtual_user`             | —        | **Destructive** — drops the tree                                                         |
 
 **Read `octoperf://skills/har-recording` before recording browser traffic or
 importing a HAR** — without a `containerTimeline` the whole capture lands in a
 single container.
+
+**Read `octoperf://skills/k6-scripting` before writing, importing or editing a
+K6 script.** A K6 Virtual User is nothing but its files (no npm install, no
+bundler), and the platform adds two things to them at run time: `__ENV.<name>`
+for every **constant** and **secret** of the project, and a generated
+`./octoperf.js` exporting `run`, `vars`, `random(name)`, `csv(name)` and
+`row(name)`. List variables are not exposed to K6 scripts; use a CSV variable
+for tabular data. `octoperf.js` and the prefix `__octoperf_` are **reserved file
+names** — the sanity check rejects a user script taking either. CSV files are
+split per container, so `csv()` / `row()` only ever see this injector's rows,
+and a CSV variable counts as used only when the script **quotes its name
+literally** (`row('customers')`) — a computed name leaves the file undownloaded.
 
 **Read `octoperf://skills/neoload-migration` before importing a NeoLoad
 project, and `octoperf://skills/loadrunner-migration` before importing a
@@ -202,6 +229,14 @@ about each kind — which of the three container modes rebuild, why a
 streamed request cannot, where an SLA profile has to be attached, which
 counters to select on a recreated monitor — lives in the skill and
 nowhere else. Without it you have the findings and not the playbook.
+
+**Read `octoperf://skills/gatling-migration` before converting a Gatling
+project.** There is no Gatling import: each simulation is rewritten as a K6
+Virtual User (`import_k6_virtual_user`), its injection profile rebuilt as a
+closed load (`create_scenario_from_k6_options`), and validated.
+`analyze_gatling_project` answers with `octoperf://schema/gatling-assessment`:
+the portability verdict, one summary per simulation with its injection steps,
+and every construct with no K6 counterpart by source and line.
 
 #### When the upload is too big
 
@@ -226,6 +261,15 @@ server-side.
 | `create_random_variable`   | Random value within constraints                    |
 | `create_secret_variable`   | Plaintext stored encrypted, redacted in UI/logs    |
 | `delete_variable`          | **Destructive**                                    |
+
+**How a variable reaches the script depends on the engine.** A JMeter VU reads
+`${variableName}` in any action field. A Playwright VU reads constants and
+secrets as `process.env.<name>`. A **K6** VU reads the same two kinds as
+`__ENV.<name>`, and everything else — randoms, CSV rows, the run's own identity
+— through the generated `./octoperf.js` module
+(`octoperf://skills/k6-scripting`). Counter variables have no K6 equivalent:
+use `__VU` / `__ITER` / `k6/execution`, and list variables are not exposed to K6
+scripts at all: use a CSV variable for tabular data.
 
 ### HTTP servers
 
@@ -260,14 +304,14 @@ server-side.
 
 ### Design SLA profiles
 
-Pass/fail bands on a Virtual User's own metrics (response time, errors, Apdex, …). A profile is inert until it is attached to a VU; on every run the attached profiles become an SLA monitor connection whose breaches surface through `get_report_threshold_alarms`. Attached, they are one of the three lines the scenario page shows under **Pass Criteria**. **Unrelated to `create_sla_monitor`**, which is a project-scoped monitor with a fixed counter set. **Read `octoperf://skills/sla` before creating or editing one.** Create-then-patch: `create_sla_profile` pre-fills the same sourced defaults as the web UI, then retune with `patch_sla_profile`.
+Pass/fail bands on a Virtual User's own metrics (response time, errors, Apdex, …), and on its custom metrics (K6 Trends, Playwright Core Web Vitals) by name. A profile is inert until it is attached to a VU; on every run the attached profiles become an SLA monitor connection whose breaches surface through `get_report_threshold_alarms`. Attached, they are one of the three lines the scenario page shows under **Pass Criteria**. **Unrelated to `create_sla_monitor`**, which is a project-scoped monitor with a fixed counter set. **Read `octoperf://skills/sla` before creating or editing one.** Create-then-patch: `create_sla_profile` pre-fills the same sourced defaults as the web UI, then retune with `patch_sla_profile`.
 
 | Tool                                    | Purpose                                                                                          |
 |-----------------------------------------|--------------------------------------------------------------------------------------------------|
 | `list_sla_profiles`                     | Profiles of a project — metrics constrained, threshold count, UI deep-link (bands omitted)        |
 | `get_sla_profile`                       | Full profile: every metric group and its graded bands                                            |
-| `list_sla_threshold_defaults`           | Suggested bands per metric, without creating anything (pass `metrics` — the full table is large) |
-| `create_sla_profile`                    | New profile pre-filled with the default bands of the named metrics                                |
+| `list_sla_threshold_defaults`           | Suggested bands per metric or custom metric name (Core Web Vitals), without creating anything — pass `metrics` / `customMetrics`, the full table is large |
+| `create_sla_profile`                    | New profile pre-filled with the default bands of the named metrics and custom metrics             |
 | `patch_sla_profile`                     | **Destructive** — RFC 6902 patch: retune a band, add/remove a metric group                        |
 | `delete_sla_profile`                    | **Destructive** — detach it everywhere first                                                      |
 | `attach_sla_profile_to_virtual_user`    | Bind the profile to a VU (idempotent) — nothing fires before this                                  |
@@ -286,6 +330,7 @@ covers the step and how to read the criteria a test already has.
 | `create_scenario_ramp_up`        | Scenario with ramp-up + hold load (VUs + provider + one-or-more regions round-robin)                                                            |
 | `create_scenario_ramp_up_down`   | Scenario with ramp-up + plateau + ramp-down (for soak tests with controlled wind-down)                                                          |
 | `create_scenario_stairs`         | Scenario with ascending stairs (N discrete steps to target users — for capacity-finding tests)                                                  |
+| `create_scenario_from_k6_options` | Scenario reproducing the load a K6 script declares, one profile per K6 scenario, from `k6 inspect --execution-requirements` run locally; lists what did not convert (`octoperf://skills/k6-scripting`) |
 | `get_scenario`                   | Full Scenario (metadata + userProfiles with load shapes + engine settings)                                                                      |
 | `update_scenario`                | Edit metadata (name/description/tags); userProfiles untouched                                                                                   |
 | `patch_scenario`                 | Edit the full scenario via RFC 6902 JSON Patch                                                                                                  |
@@ -314,17 +359,18 @@ Prefer Playwright-based virtual users over WebDriver-based virtual users.
 
 | Tool                          | Purpose                                                                                                                                                                                                                                                                                                                                               |
 |-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `validate_virtual_user`       | Starts a functional check (1 user, N iterations). Returns `(benchResultId, state)`. No credit cost.                                                                                                                                                                                                                                                   |
+| `validate_virtual_user`       | Starts a functional check (1 user, N iterations). Returns `(benchResultId, state)`. No credit cost. `providerId`, `location`, `iterations` and the engine default to the settings of the Virtual User's last validation run, or to the defaults of its type; until a run has saved them, pass `providerId` and `location`. The settings a run uses become the Virtual User's validation defaults. `entrypointFileName` picks the script a K6 validation starts with. |
+| `sanity_check_scenario`       | **PRE-FLIGHT** — sanity check of the scenario: every issue, from ERROR to INFO, with the user profile to fix (`update_user_profile` takes its id). No credit cost. An ERROR makes `run_scenario` and every scheduled fire refuse the scenario.                                                                                                          |
 | `get_scenario_matching_plans` | **PRE-FLIGHT** — list the account's subscriptions / plans that can host the scenario, with per-plan caps (concurrency, real-browser, duration) and the actual VU count each plan would allocate. Call before `run_scenario` to avoid burning credits on an under-sized plan.                                                                          |
 | `list_active_subscriptions`   | Account-level inspection: every usable subscription on the account (status `active` / `trialing` / `cancel_at_period_end`) with full plan caps (maxConcurrentUsers, maxRealBrowserUsers, maxProfilesPerScenario, maxTestDurationSec, remainingTests). Use when `get_scenario_matching_plans` returned empty to explain which cap blocks the scenario. |
 | `run_scenario`                | **Destructive (credits)** — starts a real load test. Returns the bench result id.                                                                                                                                                                                                                                                                     |
-| `get_bench_status`            | Progress `[0.0, 1.0]` for a running test                                                                                                                                                                                                                                                                                                              |
+| `get_bench_status`            | Progress, a percentage between 0 and 100, for a running test                                                                                                                                                                                                                                                                                          |
 
 ### Runtime — bench results
 
 | Tool                                  | Purpose                                                                                                                                                                                               |
 |---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `get_bench_result`                    | Full bench result entity (canonical state lookup — CREATED/PENDING/…/RUNNING/FINISHED/ABORTED/ERROR)                                                                                                  |
+| `get_bench_result`                    | Full bench result entity (canonical state lookup — CREATED/PENDING/…/RUNNING/FINISHED/ABORTED/ERROR); `scenarioId` is the copy frozen in `resultProjectId` at launch, the scenario run is the one of the same name in `designProjectId` |
 | `stop_bench_result`                   | **Destructive** — aborts a running bench (terminal state = ABORTED)                                                                                                                                   |
 | `list_bench_docker_logs`              | Docker container logs of the bench launch (same panel the web UI streams) — diagnose ERROR / stuck PREPARING / INITIALIZING runs                                                                      |
 | `list_bench_result_files`             | JMeter logs + JTL / HAR / screenshots / attachments stored against a benchResultId (also covers validation runs)                                                                                      |
@@ -341,7 +387,7 @@ CREATED → PENDING → SCALING → PREPARING → INITIALIZING ─┬─→ ERRO
 
 - Log files (`list_bench_result_files`) and the default report's metrics are populated only once the state is terminal (FINISHED / ABORTED / ERROR). Polling earlier returns an empty set.
 - Validation logs are erased **after 7 days** or when the user leaves the design screen — don't promise to read old validation logs.
-- `get_bench_status` returns progress `[0.0, 1.0]` while RUNNING; `get_bench_result` returns the canonical state at any time.
+- `get_bench_status` returns progress as a percentage between 0 and 100 while RUNNING; `get_bench_result` returns the canonical state at any time.
 - Docker launch logs (`list_bench_docker_logs`) are the right read when the run is **stuck in PREPARING / INITIALIZING** or ended in **state=ERROR** before JMeter ever started — they show provider quota errors, image pull failures, missing project files, agent boot crashes. Available from the moment the bench is scheduled; no terminal-state wait.
 
 ### Runtime — monitoring
@@ -413,16 +459,17 @@ After `get_bench_report`, dispatch by the item's `@type` to read its aggregated 
 | `get_report_tree_values`             | `StatisticTreeReportItem` (per-VU breakdown for hybrid scenarios)                             | `List<TreeEntry>`                                                                    |
 | `get_report_top_values`              | `TopReportItem` (with optional from/to window)                                                | `TopResult`                                                                          |
 | `get_report_pie_values`              | `PieChartReportItem`                                                                          | `List<Map<String, Long>>`                                                            |
-| `get_report_line_chart_values`       | `LineChartReportItem` / `PercentilesChartReportItem` (with from/to)                           | `List<List<GraphPoint>>`                                                             |
+| `get_report_line_chart_values`       | `LineChartReportItem` / `PercentilesChartReportItem` (with from/to)                           | `LineChartValues` (X = time, or the `xAxis` metric of the item)                      |
 | `get_report_stacked_chart_values`    | `StackedChartReportItem`                                                                      | `List<MapGraphPoint>`                                                                |
 | `get_report_area_range_values`       | `AreaRangeChartReportItem`                                                                    | `AreaRangeResult` (curve + ref + rmse)                                               |
-| `get_report_summary_values`          | `SummaryReportItem` / `BarChartReportItem` (with optional from/to)                            | `List<Double>` aligned with `item.metrics`                                           |
+| `get_report_summary_values`          | `SummaryReportItem` / `BarChartReportItem` (with optional from/to)                            | `values`: `{metric, value, unit}` per item metric, in its order                      |
 | `get_report_insights`                | `InsightsReportItem` (with optional from/to window)                                           | `Set<Insight>` (id + level + value + drill-in report items)                               |
 | `get_report_errors`                  | `ErrorsReportItem` (with optional from/to window)                                             | `List<BenchError>` (per-sample failures)                                             |
 | `fetch_bench_error_http`             | One `BenchError` (`benchResultId` + `actionId` + `timestamp`)                                 | `(HttpRequestEntity, HttpResponseEntity)` of the failing sample                      |
 | `get_report_threshold_alarms`        | `ThresholdAlarmReportItem` (with optional from/to window)                                     | `List<ThresholdAlarm>` (per-breach: severity, threshold, observed)                   |
 | `get_report_textual_monitors`        | `TextualMonitorReportItem`                                                                    | `List<TextualCounterValue>` (string-valued monitor samples)                          |
-| `list_bench_load_generators`         | `LoadGeneratorsChartReportItem` / `LoadGeneratorsTreeReportItem` — both pull from same source | `List<BenchLoadGenerator>` (one per LG container: region, host, VU count, start/end) |
+| `get_report_load_generators_values`  | `LoadGeneratorsChartReportItem` (with from/to, optional `perInjector`)                        | `LoadGeneratorsValues` (injectors + series, max over the LGs or one per LG)          |
+| `list_bench_load_generators`         | `LoadGeneratorsTreeReportItem` — the LG containers of the run                                  | `List<BenchLoadGenerator>` (one per LG container: region, host, VU count, start/end) |
 
 ### Analysis — report item editing
 
@@ -475,7 +522,7 @@ status / transition ids, then `create_jira_notification`. Read
 | `list_jira_notification_transitions`    | Transitions of a JIRA board — pick the pass/fail/error target columns (open-world)           |
 | `update_<channel>_notification`         | **Destructive** — overwrite a notification (resend the write-only secret)                    |
 | `delete_notification`                   | **Destructive** — permanently delete a notification                                          |
-| `test_notification`                     | Send a real test message to the channel (open-world; rate-limited 1 / 5s / user)            |
+| `test_notification`                     | Send a real test message to the channel (open-world; may be rate-limited per user)          |
 
 ## Resources
 
@@ -515,6 +562,7 @@ that the workflow TL;DRs omit.
 | `octoperf://skills/scenario-composition`      | `text/markdown` | Playbook: build or reshape a scenario's userProfiles — the four load shapes and their millisecond fields, one engine per VU type, setUp/tearDown as profile settings, create-then-patch; plus **Pass Criteria** — what says the run passed, why none of it is stored on the scenario, and the derivation that reads the ones a test already has |
 | `octoperf://skills/blazemeter-migration`       | `text/markdown` | Playbook: migrate BlazeMeter tests — **you** call the BlazeMeter API with the user's own keys (OctoPerf servers never do, and never receive one), inventory the account and give a per-`scriptType` verdict before writing anything, bring the JMeter and Taurus tests across with their data files, turn each test's `executions` load profile into a scenario, and report what has no equivalent (Gatling/Locust/Selenium scripts, multi-tests, mock services, thresholds) |
 | `octoperf://skills/loadrunner-migration`       | `text/markdown` | Playbook: migrate a LoadRunner VuGen script and its Controller scenario — read the portability verdict before committing (a script can be `QTWeb` and send nothing at all: its calls are C), import, then work the `unconverted` list kind by kind (hand-written C, conditions reading C locals, recorded cookies, parameterised servers, loop bounds, load generators, the pace between iterations, the parameters and dates a script writes, the credentials on a server, the SLA profiles to attach, the emulated network a group sat on). **Mandatory before importing**: the entries say what happened, the skill says what to do |
+| `octoperf://skills/gatling-migration`          | `text/markdown` | Playbook: convert Gatling simulations (Java, Scala, Kotlin) to K6 Virtual Users — read the portability verdict first, rebuild the injection as a closed load (an open step is users only when the scenario loops), rewrite the DSL construct by construct, then work the `unconverted` list (session code, XPath, embedded resources, non-HTTP protocols, external libraries). **Mandatory before converting** |
 | `octoperf://skills/neoload-migration`          | `text/markdown` | Playbook: migrate a NeoLoad project — read the portability verdict before committing, import, then work the `unconverted` list kind by kind (plugin dialogs, NeoLoad JavaScript, try/catch, waits, pushed and played requests, SOAP envelopes, container draws, monitors, SLA profiles). **Mandatory before importing**: the entries say what happened, the skill says what to do |
 | `octoperf://skills/har-recording`              | `text/markdown` | Playbook: build a VU from real browser traffic — drive the recording with Playwright and emit its container timeline (both automatic container strategies collapse on a scripted capture), `content: 'embed'` never `'attach'`, POST the HAR and the timeline as two parts; plus what to tell a user recording by hand in Firefox / Chrome / Fiddler / Charles |
 | `octoperf://skills/jtl-import`                 | `text/markdown` | Playbook: turn JMeter result files into an OctoPerf report — the `.zip`-of-CSV rule and the ten mandatory columns, the two default JMeter settings that pass the check and still ruin the report (date `timestamp_format`, `sample_count=false` so an uncaught 500 imports as a success), one JTL per thread group, and what the report cannot hold |
@@ -571,6 +619,41 @@ resource.
 | `https://api.octoperf.com/mcp/public/schema/injection-rules.json`   | `octoperf://schema/injection-rules`   |
 | `https://api.octoperf.com/mcp/public/schema/sla-profile.json`  | `octoperf://schema/sla-profile`       |
 
+## Documentation
+
+The tools, skills and schemas above cover what the MCP server can do.
+For anything else — what a setting means, a limit, a UI screen, an
+on-premise installation step, what changed in a release — read the
+OctoPerf documentation instead of answering from memory: training data
+may describe an older OctoPerf version.
+
+The documentation is published for LLMs:
+
+| URL                                          | Content                                                                 |
+|----------------------------------------------|-------------------------------------------------------------------------|
+| `https://api.octoperf.com/doc/llms.txt`      | Index: every page with a one-line description, grouped like the menu    |
+| `https://api.octoperf.com/doc/<page>.md`     | One page as Markdown: the page URL without its trailing `/`, plus `.md` |
+| `https://api.octoperf.com/doc/llms-full.txt` | All pages in one file (~1.8 MB) — too large for most contexts, avoid it |
+
+For example, `https://api.octoperf.com/doc/runtime/scheduler/` is
+available as `https://api.octoperf.com/doc/runtime/scheduler.md`.
+
+How to use it:
+
+1. Read `llms.txt` once per session and pick the page(s) matching the question.
+2. Fetch the `.md` of those pages only.
+3. Answer from the page, and give the user the page URL (without `.md`) as the source.
+
+Self-hosted Enterprise servers serve the documentation of their own
+version under `/doc/` (e.g. `https://octoperf.example.com/doc/llms.txt`).
+Prefer it over `api.octoperf.com` when connected to such a server. The
+links inside `llms.txt` point to `api.octoperf.com`: fetch the same path
+on the self-hosted host.
+
+Reading the documentation requires a web fetch capability on the client
+side. Without one, rely on the tools, skills and schemas, and point the
+user to the documentation URL.
+
 ## Recommended workflows
 
 Each workflow is a quick-start TL;DR. For deeper playbooks (failure
@@ -588,15 +671,16 @@ MCP skill resource via `resources/read` — the server publishes them at
 | `octoperf://skills/async-polling`      | About to wait on a `taskId` or `benchResultId` (load test, validation, PDF, correlation) — defines the sleep cadence and terminal conditions |
 | `octoperf://skills/har-recording`      | About to record browser traffic, or to import a HAR someone recorded                                                                        |
 | `octoperf://skills/jtl-import`         | About to import JMeter JTL result files rather than run a test                                                                              |
+| `octoperf://skills/k6-scripting`       | About to write, import or edit a K6 script — variables (`__ENV`, `./octoperf.js`), the per-container CSV split, the reserved file names     |
 
 ### 1. Import → validate → fix → run
 
 1. `import_*_virtual_user` (HAR, JMX, Postman, …) → returns the new VU id.
 2. `sanity_check_virtual_user` → catches static issues with zero credit cost. Fix anything flagged.
-3. `validate_virtual_user` against a Docker provider/location → starts a 1-user functional run.
+3. `validate_virtual_user` → starts a 1-user functional run on the Virtual User's saved provider/location, or on the ones you pass.
 4. Poll `get_virtual_user_validation` until `finished=true` (see `octoperf://skills/async-polling` for cadence — ~5s between calls).
-5. If failures: `get_virtual_user_validation_index` lists the failing actions; for each, `get_validation_failure_detail` shows the four HTTP entities so you can diagnose. Apply correlation rules or edit variables / servers as needed.
-6. Loop steps 3-5 until clean, then `run_scenario` and poll `get_bench_result` until `state ∈ {FINISHED, ABORTED, ERROR}` (use `get_bench_status` for progress display only; see `octoperf://skills/async-polling`); once FINISHED, pull the default report with `get_bench_report` and read its SummaryReportItem via `get_report_summary_values`.
+5. If failures: `get_virtual_user_validation_index` lists the runs of every action by name, the failing ones with `failedTimestamps`; for each, `get_validation_failure_detail` shows the four HTTP entities so you can diagnose. Apply correlation rules or edit variables / servers as needed.
+6. Loop steps 3-5 until clean, then `sanity_check_scenario` on the scenario (fix every ERROR), then `run_scenario` and poll `get_bench_result` until `state ∈ {FINISHED, ABORTED, ERROR}` (use `get_bench_status` for progress display only; see `octoperf://skills/async-polling`); once FINISHED, pull the default report with `get_bench_report` and read its SummaryReportItem via `get_report_summary_values`.
 
 ### 2. Auto-correlation a HAR-imported VU
 
@@ -616,7 +700,7 @@ captured during recording are stale on the next run. Use this recipe:
 
 When validation has many failures, don't read them all serially:
 
-1. `get_virtual_user_validation_index` → action-by-action summary (HTTP code, error type).
+1. `get_virtual_user_validation_index` → action-by-action runs, named, with their failed timestamps.
 2. Group by error category (auth, missing variable, server error, body mismatch).
 3. Drill into the *first* representative of each group with `get_validation_failure_detail` and `fetch_validation_http_body`.
 4. Apply one fix (a correlation rule, a variable, an HTTP server timeout) → re-validate → confirm the whole group cleared.
@@ -625,7 +709,7 @@ When validation has many failures, don't read them all serially:
 
 1. `upload_project_file` → upload the CSV.
 2. `create_csv_variable` referencing that file, with the column names.
-3. Re-import / edit the VU to bind action fields to `${variableName}` references.
+3. Re-import / edit the VU to bind action fields to `${variableName}` references — in a K6 script, `row('<variableName>')` instead (`octoperf://skills/k6-scripting`).
 4. Validate.
 
 ### 5. Diagnose a failing / underperforming scenario run
@@ -641,7 +725,7 @@ When validation has many failures, don't read them all serially:
 ## Safety conventions
 
 - Tools marked **Destructive** in this guide consume credits or delete data. Always confirm with the user (PR-style summary, expected impact) before invoking them. Name the account the work will be done as — `get_current_user` — in that confirmation.
-- `run_scenario` is the most expensive — it triggers a real load test on the configured providers. Never call it as part of an exploratory chain; only when the user explicitly asks to run. Call `get_scenario_matching_plans` first as a pre-flight: an empty list means no plan can host the scenario (use `list_active_subscriptions` to see which cap is binding); a non-empty list confirms the run is launchable as configured.
+- `run_scenario` is the most expensive — it triggers a real load test on the configured providers. Never call it as part of an exploratory chain; only when the user explicitly asks to run. Call `sanity_check_scenario` first — a scenario with an ERROR is refused before any credit is consumed — then `get_scenario_matching_plans` as a pre-flight: an empty list means no plan can host the scenario (use `list_active_subscriptions` to see which cap is binding); a non-empty list confirms the run is launchable as configured.
 - `validate_virtual_user` does not consume credits, but it still spins up a load generator and takes time — batch fixes and re-validate once, not after every micro-edit.
 - Imports overwrite nothing: each `import_*` creates a *new* VU. Use `update_*` / `delete_*` if you want to edit in place.
 

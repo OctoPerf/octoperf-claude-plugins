@@ -57,6 +57,10 @@ Any other label is a transport / UI artefact.
 
   Common ERROR-state causes:
 
+  - *Scenario refused* → `run_scenario` answered `Scenario cannot run: …`
+    and no run was created: the sanity check found an ERROR.
+    `sanity_check_scenario(scenarioId)` lists every issue with the
+    user profile to fix.
   - *No matching plan / capacity exhausted* → run pre-flight on the
     scenario to see why: `get_scenario_matching_plans(scenarioId)`
     (empty result) + `list_active_subscriptions()` (lists caps).
@@ -81,15 +85,22 @@ mcp__octoperf__get_report_summary_values(reportId, summaryItemId)
 The default report's SummaryReportItem aggregates the test-wide values:
 average response time, percentiles (p50/p90/p95/p99), hits per second,
 total error rate, error count by type, total transactions, throughput.
+Each value comes with its `metric` and its `unit`: times in
+MILLISECONDS, percents on a 0-100 scale, rates per second. The median
+and the percentiles are computed over per-interval averages, not over
+each request: they understate the slowest requests, a p99 most of all —
+look at the maximum and at the errors before calling a p99 healthy.
 **Don't dive into per-action data yet** — the global view tells you
 which class of problem you're in.
 
 **Trust caveat — load-generator overload.** Before reading any response
-time, check whether the bench report has a `MonitoringAlarmsReportItem`
+time, check whether the bench report has a `ThresholdAlarmReportItem`
 firing on the load generators (CPU / memory / load average). If it
 fires, the response times in the report are **underestimated**: the
 load generator itself was the bottleneck, and JMeter's internal timing
-becomes unreliable. Surface this as a confidence caveat ("response
+becomes unreliable. `get_report_load_generators_values` on the
+report's `LoadGeneratorsChartReportItem` shows the same counters over
+time, and `perInjector: true` names the LG that saturated. Surface this as a confidence caveat ("response
 times are suspect — LG was overloaded") before drawing conclusions,
 and suggest re-running on the cloud or on a larger LG.
 
@@ -357,4 +368,4 @@ WAF, DDoS-protection) rather than a real capacity issue.
 - `octoperf-validation-triage` — when the VU itself is failing.
 - `octoperf-auto-correlation` — when failures are session/auth-state related.
 - `octoperf-async-polling` — sleep cadence + terminal conditions when waiting on a running bench.
-- OctoPerf bench reports docs: <https://doc.octoperf.com/analysis/bench-reports/>
+- OctoPerf bench reports docs: <https://api.octoperf.com/doc/analysis/>

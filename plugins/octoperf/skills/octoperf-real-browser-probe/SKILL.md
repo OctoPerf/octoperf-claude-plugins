@@ -118,12 +118,12 @@ test('petstore browse + login probe', async ({ page }) => {
   const password = process.env.PETSTORE_PASSWORD ?? 'j2ee';
 
   await page.goto('https://petstore.octoperf.com/');
-  await page.goto('https://petstore.octoperf.com/actions/Catalog.action?viewCategory=&categoryId=FISH');
+  await page.goto('https://petstore.octoperf.com/catalog/viewCategory?categoryId=FISH');
   await page.click('a[href*="productId=FI-SW-01"]');
   await page.click('a[href*="itemId=EST-1"]');
-  await page.click('a[href*="addItemToCart"]');
+  await page.click('a[href*="/cart/addItem"]');
 
-  await page.goto('https://petstore.octoperf.com/actions/Account.action?signonForm=');
+  await page.goto('https://petstore.octoperf.com/account');
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
   await page.click('input[name="signon"]');
@@ -165,10 +165,12 @@ a short-lived URL and returns it; the client then POSTs the spec
 directly to the OctoPerf REST host (bypassing the MCP server for the
 bytes). The REST response is a raw `VirtualUser` JSON without a UI
 deep-link — chain into `describe_virtual_user` to get the compact
-listing.
+listing. The Virtual User is named after the spec file (`login.spec.ts`
+gives `login`), numbered when the project already holds that name;
+pass `name` to choose it.
 
 ```
-upload = mcp__octoperf__import_playwright_virtual_user(projectId)
+upload = mcp__octoperf__import_playwright_virtual_user(projectId, name)  # name optional
 # POST the spec bytes to `upload.url` as multipart/form-data, single
 # part named `files` — plural, that is the field the endpoint reads —
 # Content-Type `text/plain; charset=utf-8`. Read the returned VU's
@@ -183,9 +185,8 @@ the spec through the OctoPerf web UI rather than failing the task.
 ### 4. Validate the Playwright VU standalone
 
 ```
-mcp__octoperf__validate_virtual_user(projectId, virtualUserId,
-                                     providerId, location,
-                                     iterations=1)
+mcp__octoperf__validate_virtual_user(projectId, virtualUserId)
+# providerId and location are needed only until a validation run has saved them
 mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)
 ```
 
@@ -193,6 +194,12 @@ Poll until terminal. Playwright validation is slower than JMeter
 (launching Chromium = ~10 s warmup). The validation captures a HAR
 file and screenshots under the run's `benchResultId` — list them with
 `list_bench_result_files`.
+
+**Reproduce it locally first.** `export_virtual_user(virtualUserId)`
+returns the VU as `package.json` + the spec: unzip it, `npm install`,
+`npx playwright install chromium` once, then `npx playwright test --trace on`.
+A selector or a navigation fix is then checked in seconds rather than one
+validation run each; bring the fixed spec back with `patch_virtual_user`.
 
 **Debugging the failure: read the trace.zip, not just the log.** The
 JMeter docker log only sees the JMeter-side wrapper around `npx
@@ -282,7 +289,9 @@ In the resulting `get_bench_report`, both VUs show up — but their
 metrics tell different stories:
 
 - **JMeter VU metrics**: server response times, throughput, error
-  rate. Read p95 / p99 from `get_report_summary_values`. This is the
+  rate. Read p95 / p99 from `get_report_summary_values` — in
+  milliseconds, and computed over per-interval averages, so they
+  understate the slowest requests. This is the
   load story.
 - **Playwright VU metrics**: per-action timings include browser-side
   cost (DOM, paint, JS). The action labelled `page.goto(...)` reports
@@ -336,4 +345,4 @@ specifically.
   metrics and you need to tell whether it's the load, the probe, or
   the target.
 - Playwright docs: <https://playwright.dev/>
-- OctoPerf Playwright VU docs: <https://doc.octoperf.com/design/virtual-users/playwright/>
+- OctoPerf Playwright VU docs: <https://api.octoperf.com/doc/design/create-virtual-user/import-playwright-node-project/>

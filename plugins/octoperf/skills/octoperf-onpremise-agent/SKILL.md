@@ -1,3 +1,8 @@
+---
+name: octoperf-onpremise-agent
+description: Use when running OctoPerf load tests from the user's own machines instead of the Cloud — creating an on-premise provider, sizing it, installing agents, managing locations. Triggers on "run the test from my own servers", "install an on-premise agent", "load test an internal application", "how many agents do I need", "rename a location". Covers the provider-as-localized-capacity model, reachability of the target, the one-agent-per-machine rule, the sizing dialogue and the rename/remove-location → reinstall flow. Requires the OctoPerf MCP server.
+---
+
 # On-premise providers & agents — capacity-first playbook
 
 Set up and run OctoPerf load tests from **your own machines** instead of the
@@ -46,9 +51,14 @@ agent assumes it owns the whole machine), and it causes memory problems.
 
 **Rule: one machine = one agent.** For more capacity, add more **machines**.
 
-Detect it with `list_provider_agents`: an agent with `duplicateOnHost=true`
-(more than one running `octoperf/docker-agent` container on its host) is a
-duplicate. Do **not** trust `remoteAddr` for this — it is often a Docker-internal
+Detect it with `sanity_check_provider` (one provider) or `sanity_check_scenario` (the
+locations of a scenario): `AGENTS_SHARING_A_MACHINE` names the agents up that see the same
+Docker containers, compared with the agents of every provider assigned to the workspace; their ids
+are those of `list_provider_agents`. `sanity_check_provider` also tells a memory per agent declared under half the
+memory of the smallest agent alone on its machine (`MEMORY_UNDER_DECLARED`): it splits the load
+into more load generators than needed. It answers 403 for a provider the caller cannot read — a
+public provider of another workspace is never checked —, 404 for one not assigned to the
+workspace, 400 for one that is not on-premise: an empty list always means nothing to fix. Do **not** trust `remoteAddr` for this — it is often a Docker-internal
 `172.17.0.x` address shared by unrelated agents.
 
 ## Sizing dialogue — ask, propose, default
@@ -90,21 +100,24 @@ Drive the conversation around capacity; keep memory tuning for edge cases.
    <https://api.octoperf.com/doc/on-premise-agent/provider-type/on-premise/#im-using-podman-instead-of-docker>.
    Repeat per machine to reach the planned agent count — **one agent per
    machine**.
-4. Before handing over a command, run `list_provider_agents` and warn on any
-   `duplicateOnHost=true`. Remind the user to run each command on a machine that
+4. Before handing over a command, run `sanity_check_provider` and warn on any
+   `AGENTS_SHARING_A_MACHINE`. Remind the user to run each command on a machine that
    has no OctoPerf agent yet.
-5. Agents take a minute to register; re-run `list_provider_agents` (or
-   `get_provider_usage`) until they appear `UP`. If an agent never shows up, the
+5. Agents take a minute to register; re-run `list_provider_agents` until they
+   appear `UP`. If an agent never shows up, the
    command embeds a `SERVER_URL` — check it is the reachable backend host, not a
    local/incorrect address.
 
 ## Workflow 2 — check current capacity and load
 
-`get_provider_usage(providerId)` reports, per location, how many agents run and
-how much memory is in use, plus the per-machine memory config. This is the
-**real** capacity (it depends on the agents actually installed). Compare it to
-the plan: too few agents at a location → install more; a location at high memory
-use during a run → the machines are near saturation.
+`sanity_check_scenario(scenarioId)` on the scenario to run answers it: it places
+the scenario's load generators on the agents that are `UP`, the way a test start
+does. Its `AGENT_MISSING` (no agent `UP` in the location, or none reporting
+memory), `CAPACITY_EXCEEDED` (they never fit, even on idle agents) and
+`CAPACITY_BUSY` (a WARNING: other tests use the agents right now) name the
+memory the load generators need and the memory left on the agents: install
+more agents, or bigger ones, at that location.
+`list_provider_agents` gives the agents and their state per location.
 
 ## Workflow 3 — manage locations (and reinstall affected agents)
 

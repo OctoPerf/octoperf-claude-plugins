@@ -1,6 +1,6 @@
 ---
 name: octoperf-bench-reports
-description: Use when reading or interpreting an OctoPerf bench report — picking the right `get_report_*_values` tool for a given report item, understanding the difference between flat, trend and comparison reports, reusing a report's shape through a report template, decoding semantic gotchas (Hits vs Hits CONTAINER, 304 cache hits skewing throughput, Playwright per-step row types, etc.). Triggers on "what's the right tool for this report item", "explain this metric", "how do I read this trend report", "compare these two runs", "save this report as a template", "apply my template to this report", "what does parallelRunsSupported mean", "why is the Network row 24ms while page.goto is 364ms", "DELTA computeType". Complements `octoperf-scenario-diagnosis` — that skill walks the diagnosis workflow, this one is the report item-by-report item reading guide. Requires the OctoPerf MCP server.
+description: Use when reading or interpreting an OctoPerf bench report — picking the right `get_report_*_values` tool for a given report item, understanding the difference between flat, trend and comparison reports, reusing a report's shape through a report template, decoding semantic gotchas (Hits vs Hits CONTAINER, 304 cache hits skewing throughput, Playwright per-step row types, etc.). Triggers on "what's the right tool for this report item", "explain this metric", "how do I read this trend report", "compare these two runs", "save this report as a template", "apply my template to this report", "at what load does the response time take off", "what does parallelRunsSupported mean", "why is the Network row 24ms while page.goto is 364ms", "DELTA computeType". Complements `octoperf-scenario-diagnosis` — that skill walks the diagnosis workflow, this one is the report item-by-report item reading guide. Requires the OctoPerf MCP server.
 ---
 
 # OctoPerf — Reading bench reports
@@ -95,21 +95,21 @@ For every report item type that's reachable from MCP:
 
 | `@type`                              | Tool                                                  | Returns                                                                    |
 |--------------------------------------|-------------------------------------------------------|----------------------------------------------------------------------------|
-| `SummaryReportItem`                  | `get_report_summary_values`                           | `List<Double>` aligned with `item.metrics[i].id`                           |
-| `BarChartReportItem`                 | `get_report_summary_values` *(same shape as Summary)* | `List<Double>` aligned with `item.metrics[i].id`                           |
+| `SummaryReportItem`                  | `get_report_summary_values`                           | `values`, one `{metric, value, unit}` per item metric, in its order        |
+| `BarChartReportItem`                 | `get_report_summary_values` *(same shape as Summary)* | `values`, one `{metric, value, unit}` per item metric, in its order        |
 | `StatisticTableReportItem`           | `get_report_table_values`                             | `List<TableEntry>` (`actionId` → `values`)                                 |
 | `StatisticTreeReportItem`            | `get_report_tree_values`                              | `List<TreeEntry>` (`virtualUserId` + `actionId` → `values`) — per-VU split |
 | `TopReportItem`                      | `get_report_top_values`                               | `TopResult` (top-N actionIds + per-action curve)                           |
 | `PieChartReportItem`                 | `get_report_pie_values`                               | `List<Map<String, Long>>` (one map per benchResult, label → count)         |
-| `LineChartReportItem`                | `get_report_line_chart_values`                        | `List<List<GraphPoint>>` (one series per metric, `(x=epoch-ms, y)`)        |
-| `PercentilesChartReportItem`         | `get_report_line_chart_values`                        | Same shape — percentile curve                                              |
+| `LineChartReportItem`                | `get_report_line_chart_values`                        | `LineChartValues` (one series per metric; `x`=epoch-ms, or the X metric when the item has an `xAxis`) |
+| `PercentilesChartReportItem`         | `get_report_line_chart_values`                        | Same shape — percentile curve, always against time                         |
 | `StackedChartReportItem`             | `get_report_stacked_chart_values`                     | `List<MapGraphPoint>` (`x` + per-series map)                               |
 | `AreaRangeChartReportItem`           | `get_report_area_range_values`                        | `AreaRangeResult` (`curve` vs `reference`, `rmse`)                         |
 | `InsightsReportItem`                 | `get_report_insights`                                 | `Set<Insight>` (severity + value + drill-in report item)                        |
 | `ErrorsReportItem`                   | `get_report_errors`                                   | `List<BenchError>` (per-sample failures)                                   |
 | `ThresholdAlarmReportItem`           | `get_report_threshold_alarms`                         | `List<ThresholdAlarm>` (per-breach)                                        |
 | `TextualMonitorReportItem`           | `get_report_textual_monitors`                         | `List<TextualCounterValue>` (string-valued monitor samples)                |
-| `LoadGeneratorsChartReportItem`      | `list_bench_load_generators`                          | `List<BenchLoadGenerator>` — chart is derived from this                    |
+| `LoadGeneratorsChartReportItem`      | `get_report_load_generators_values`                   | `LoadGeneratorsValues`: the `injectors` it reads and its `series`, max over the LGs (`perInjector` splits them) |
 | `LoadGeneratorsTreeReportItem`       | `list_bench_load_generators`                          | Same source as the chart — tree is just a different rendering              |
 | `TextReportItem`                     | *(no tool — descriptive markdown)*                    | n/a — `item.description` carries the markdown                              |
 | `SynopsisReportItem`                 | *(no tool — scenario metadata)*                       | n/a — render the synopsis section in the UI for the user                   |
@@ -140,7 +140,7 @@ Ignore the container row when looking for slow *real* actions.
 ### Metric subtypes — not every sub-count is on every report item
 
 For the full per-report item allow-list, see the
-[hit-metrics availability table](https://doc.octoperf.com/analysis/edit-bench-report/performance-metrics/#hit-metrics-availability)
+[hit-metrics availability table](https://api.octoperf.com/doc/analysis/edit-bench-report/performance-metrics/#hit-metrics-availability)
 in the public doc. The recurring picks that trip up an LLM:
 
 - `Hits` (`Total` / `Total Successful` / `Rate` / `% Successful`) and `Errors` (`Total` / `Rate` / `% Error`) are accepted on Line, Summary, Table/Tree, Bar, Area. `Top` excludes `Rate` for both; `Percentiles` accepts only `Total` + `Rate` for Hits and only `Total` + `Rate` for Errors (no `% Error`).
@@ -195,8 +195,68 @@ row for the true wall-clock.
 - `ErrorsReportItem` (`get_report_errors`): on SaaS the result is capped at **2 rows per `(loadGenerator, request, responseCode)` triple** — counts are exact but the returned sample list is a quota-limited subset (on-prem can override).
 - `ErrorsReportItem` covers 3 trigger types: 4XX/5XX, engine-level Java exception (response code `-1`, header `HTTP/1.1 -1 - UNKNOWN`), and failed `ResponseAssertion`. Only the `assertions[]` field on a `BenchError` distinguishes assertion failures from non-2XX.
 - `TextualMonitorReportItem`: filter is **monitor-connection-only** (no metric / location filters). An empty result means the connection emitted no string-valued counters this run.
-- `MonitorsTableReportItem` lists the run's own copy of the monitor connections — SLA profiles included, load generator hosts and JVMs excluded since the report charts those in `LoadGeneratorsChartReportItem` items. Its `connectionName` / `counterPaths` are tag values, ready to use as `SingleTermFilter` terms on a `MONITORING` metric. An empty `counterPaths` means the connection was configured but sampled nothing.
-- `LoadGeneratorsChartReportItem` (hosts: `monitorType=HOST`; JVMs: `monitorType=JVM`) plots a **fixed metric set as max across all LGs**, not per-LG. Hosts: `%CPU`, `%Mem`, `%SegRetrans`, `Received MB/s`. JVMs: heap %, G1 young/old count + time.
+- `MonitorsTableReportItem` lists the run's own copy of the monitor connections — SLA profiles included, load generator hosts and JVMs excluded since the report charts those in `LoadGeneratorsChartReportItem` items, read with `get_report_load_generators_values`. Its `connectionName` / `counterPaths` are tag values, ready to use as `SingleTermFilter` terms on a `MONITORING` metric. An empty `counterPaths` means the connection was configured but sampled nothing.
+- `LineChartReportItem` with an `xAxis`: see *Reading a line chart by metric* below.
+- `LoadGeneratorsChartReportItem` (hosts: `monitorType=HOST`; engines: `monitorType=JVM`, JMeter JVMs then K6 runtimes) plots the **four most telling counters of each family as max across all LGs**, not per-LG: the preferred counters of the monitor type first (hosts: `% CPU Idle`, `% CPU Usage`, `% Used Memory`, `Load Avg per CPU (1min)`; K6: `% Memory Used`, `% CPU`, `Goroutines`, `% GC Time`), then the counters carrying the most thresholds. `get_report_load_generators_values` returns those series; `perInjector: true` gives one per LG and counter, to name the LG that saturated.
+
+### Reading a line chart by metric
+
+A `LineChartReportItem` carrying an `xAxis` (`{"id": "USERLOAD", "type": "LOAD", …}`) plots
+its curves against that metric instead of time. `get_report_line_chart_values` then returns,
+per curve, one point per **class** of X values, ordered by `x`:
+
+| Field   | Meaning                                                                                     |
+|---------|---------------------------------------------------------------------------------------------|
+| `x`     | Mean of the X values in the class — not the class centre                                    |
+| `y`     | Mean of the curve over the time buckets of the class; each bucket weighs the same           |
+| `min` / `max` | Lowest / highest bucket value of the curve in the class                               |
+| `std`   | Sample standard deviation of those bucket values; 0 when `count` is 1                       |
+| `count` | Number of time buckets in the class                                                         |
+
+- The spread describes **bucket values, not requests**: `max` is not `RESPONSE_TIME_MAX`.
+- A class with `count` 1 or 2 is weak evidence — a ramp crossed it once. Hedge on it, or read
+  the classes around it.
+- A bucket counts only where both the curve and the X have a value, so a curve with sparse
+  samples (errors, a rare action) has fewer classes than the X alone would give.
+- `binning`: `AutoBinning` keeps one class per exact X value when there are few of them
+  (≤ 100, and at least 3 buckets each on average), else ~50 equal-width classes — whole-number
+  widths for whole-number X such as USERLOAD. `FixedBinning(size)` aligns classes on
+  multiples of `size`.
+- `spread` (`NONE`, `STD`, `MIN_MAX`) only changes how the UI draws the band; the tool returns
+  `min`, `max`, `std` and `count` whatever it is.
+- In a comparison report each curve reads its X on its own run, so the curves of two runs
+  line up on the same X scale even when their ramps differ in time.
+- Each curve is binned on its own X values: two curves need not share their classes, nor
+  their `x`. Compare them by `x` value, never by point index.
+- The X inherits the curve's filters its sample type knows: a `virtualUserName` filter
+  narrows the active users too, an `actionPath` filter does not (`LOAD` samples have no
+  action).
+
+Typical reads: the **knee** of `RESPONSE_TIME_AVG` against `USERLOAD` (where `y` starts
+climbing faster than `x`), and the **saturation plateau** of `HITS_RATE` against `USERLOAD`
+(more users, no more throughput). The time-based chart of the same item answers *when*; this
+one answers *at what load*.
+
+### Reading a line chart with a time span
+
+A `LineChartReportItem` whose `xAxis` is a `TimeXAxis` (`{"@type": "TimeXAxis",
+"spanIntervals": 3, "spread": "STD"}`) is still plotted against time, with a spread band. Each
+bucket gets a **span**: itself and the buckets within `spanIntervals` sampling intervals on each
+side. `get_report_line_chart_values` returns one point per bucket, ordered by `x`, with the same
+fields as above, read over the span:
+
+| Field   | Meaning                                                                                     |
+|---------|---------------------------------------------------------------------------------------------|
+| `x`     | Mean instant of the span, in epoch-ms (from the first bucket on a comparison): the bucket's own instant away from the edges and gaps |
+| `y`     | Moving average of the curve over the span — **not** the raw bucket value                    |
+| `min` / `max` | Lowest / highest bucket value in the span                                             |
+| `std`   | Sample standard deviation of those bucket values                                            |
+| `count` | Buckets in the span: `2 × spanIntervals + 1`, fewer at the edges of the range or over gaps   |
+
+- The raw bucket values are what the same item returns **without** its `xAxis`.
+- `spanIntervals` counts the sampling intervals of each curve's own run, so in a comparison two
+  runs with different samplings get spans of the same size over different durations.
+- As against a metric, the spread describes bucket values, not requests.
 
 ### `parallelRunsSupported` in `ScenarioMatchingPlan`
 
@@ -368,7 +428,13 @@ the Report Templates page edits. Where presentation lives:
   unit and gives it one of its own. The scale belongs to the axis but is
   stored per metric: write the same `scale` on every metric of one axis.
   Only line charts, unstacked bar charts and percentiles charts draw it,
-  every other report item ignores it;
+  every other report item ignores it. Two `CUSTOM` curves of different
+  `metricName`s sharing a unit need one (see `octoperf-report-item-editing`);
+- **a `CUSTOM` metric's unit** — a `UnitReportConfig` in the same place, e.g.
+  `{"@type":"UnitReportConfig","unit":"TIME"}`. `unit` is `TIME`
+  (milliseconds), `DATA` (bytes) or `DEFAULT` (a plain number); copy it from
+  the `metricUnit` tag of the metric (`get_report_tag_values`). Without it a
+  `CUSTOM` curve is drawn as a plain number;
 - **the template-wide settings** — the root `/configs`.
 
 Two things it will not do. It refuses a patch that changes `id` or
@@ -410,4 +476,4 @@ only way to create one — there is no writing a template from scratch.
 
 - `octoperf-scenario-diagnosis` — workflow for diagnosing a poor run (this skill is the reading guide; scenario-diagnosis is the action plan).
 - `octoperf-validation-triage` — when the report shows the VU itself is failing.
-- OctoPerf bench reports docs: <https://doc.octoperf.com/analysis/bench-reports/>
+- OctoPerf bench reports docs: <https://api.octoperf.com/doc/analysis/>
