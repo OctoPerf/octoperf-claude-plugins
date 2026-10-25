@@ -1,3 +1,8 @@
+---
+name: octoperf-scenario-composition
+description: Use when building or reshaping an OctoPerf scenario — its user profiles, load shapes, engines, set-up/tear-down and pass criteria. Triggers on "create a scenario with 100 users", "ramp up over 10 minutes", "add a user profile", "run this VU from another location", "set pass criteria on the test". Covers create-then-patch, load shapes, one engine per Virtual User type, why set-up/tear-down are not user profiles, pass criteria and re-pointing a profile. Requires the OctoPerf MCP server.
+---
+
 # Scenario composition — user profiles, load shapes, engines
 
 A scenario is a list of **user profiles**. One profile = one Virtual User, played on
@@ -42,14 +47,19 @@ The engine block is not free-form — it follows the type of the VU the profile 
 | `JMETER` | `JmeterUserProfileEngine` | `settings`, `bandwidth`, `browser`, `dns`, `jtl`, `properties` |
 | `WEB_DRIVER` | `SeleniumUserProfileEngine` | `settings`, `bandwidth` |
 | `PLAYWRIGHT` | `PlaywrightUserProfileEngine` | `settings`, `device`, `timeoutMs`, `baseURL`, `slowMoMs` |
+| `K6` | `K6UserProfileEngine` | `entrypointFileName` (empty = the first script of the VU), `exec` (the exported function of that script the profile runs, empty = its `default` export) and the `k6 run` flags OctoPerf imposes: `insecureSkipTlsVerify`, `noConnectionReuse`, `gracefulStopMs` (absent = 0, not K6's 30 s: the iterations still running when the load ends are interrupted), `noThresholds`, `throwOnError`, `abortOnFail` (off by default: OctoPerf clears the `abortOnFail` of the script thresholds, which stay evaluated and reported; on, a failing one stops K6 on its load generator, the others going on), `maxRedirects`, `userAgent`, `rps`, `batch`, `batchPerHost`, `dns` (`ttl`, `select`, `policy`), `blockHostnames`, `blacklistIps`, `env` (`-e` variables), `uploadCsvOutput` (uploads the raw `--out csv` file with the logs of a standard run, off by default), `memory.capturePercent` (share of the container, 1 to 50, the HTTP capture previews may hold; absent = the platform default, and the budget stays within the platform bounds); no JMeter `settings` block at all, the load is the scenario's |
 | `FRAGMENTS` | none | a fragment is reusable content, it cannot be loaded on its own |
+
+A K6 profile's `entrypointFileName` names a file of the VU, and the script itself
+reads the project's variables through `__ENV` and its generated `./octoperf.js` —
+`octoperf://skills/k6-scripting` before touching one.
 
 So DNS overrides and JMeter properties simply do not exist on a Playwright profile,
 and a device is meaningless on a JMeter one. `update_user_profile` swaps the whole
 block when you re-point a profile to a VU of another type — which resets that
 profile's engine settings to the defaults of the new type.
 
-All three share `JmeterEngineSettings`: `thinkTime`, `errorHandling`,
+The three JMeter-based engines share `JmeterEngineSettings`: `thinkTime`, `errorHandling`,
 `externalLiveReporting`, and the `setUp` / `tearDown` below.
 
 ## Set Up and Tear Down are not user profiles
@@ -139,7 +149,37 @@ connection raised how many and how badly.
 
 `update_user_profile` changes what a profile plays and where — the scenario's **VU**
 and **Location** steps — and nothing else. A provider or a location the workspace
-cannot use is refused, and the refusal names the ones it can.
+cannot use is refused, and the refusal names the ones it can. The workspace runs on its
+own providers, `list_docker_providers_by_workspace`, and on the public ones,
+`list_public_docker_providers`.
 
 Everything else is `patch_scenario` against the profile's path, with
 `octoperf://schema/scenario` as the source of truth for the shape.
+
+## Check the scenario before it runs
+
+Once composed, call `sanity_check_scenario`. It runs nothing and costs no credit, and it
+catches what would otherwise fail at the launch, each issue under its `rule`:
+- Virtual Users: missing or outside the project, set-up and tear-down included
+  (`VIRTUAL_USER_MISSING`, `VIRTUAL_USER_OUT_OF_PROJECT`), a Fragments Virtual User, an
+  engine that does not match its Virtual User, a K6 script with no entrypoint.
+- Providers and locations: a provider missing, unreachable or disabled, a region the
+  provider does not offer, too few dedicated IPs (`DEDICATED_IPS_SHORT`, a WARNING), a
+  private server a cloud location cannot reach, IP spoofing outside an on-premise location.
+- On-premise capacity, the load generators placed on the agents `UP` the way a launch does:
+  no agent in the location (`AGENT_MISSING`), not enough memory even on idle agents
+  (`CAPACITY_EXCEEDED`), agents busy with other tests right now (`CAPACITY_BUSY`, a WARNING),
+  agents sharing one machine, whose memory is then counted several times
+  (`AGENTS_SHARING_A_MACHINE`, a WARNING), a memory per agent declared so low that the load
+  starts more load generators than the agents need, or under half the memory of the smallest
+  agent (`MEMORY_UNDER_DECLARED`, an INFO).
+- Load: no Virtual User at its peak, a load or a set-up / tear-down that never ends,
+  iterations past the watchdog, a memory per Virtual User out of range.
+- Subscriptions: none of the user's subscriptions can run the scenario
+  (`SUBSCRIPTION_MISSING`), each one with the limit that stops it.
+- Settings: a live reporting listener or a DNS server with no address, user profiles
+  duplicated or sharing a name.
+
+Every issue names the user profile to fix, by id for `update_user_profile` and by name for
+the user. An ERROR blocks the launch: `run_scenario` and every scheduled fire refuse the
+scenario until it is fixed; a WARNING or an INFO never does.

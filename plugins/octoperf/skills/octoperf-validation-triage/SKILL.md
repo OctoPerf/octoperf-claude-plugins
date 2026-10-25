@@ -23,12 +23,29 @@ representative per group, and maps each group to the correct fix.
 mcp__octoperf__get_virtual_user_validation_index(virtualUserId)
 ```
 
-The index returns one entry per **validated** HTTP action — `actionId`,
-`success`/`total` counts, `successTimestamps` and `failedTimestamps`. For
-triage, focus on the entries whose `failedTimestamps` is non-empty (the
+The index returns one entry per action with a validation run, in the order of
+the Virtual User's tree — `actionId`, `name` (what the UI shows: the action's
+name, or its URL when it has none), `path` (its containers, joined with `⫽`),
+`label`, `success`/`total` counts, `successTimestamps` and `failedTimestamps`.
+Present a row by its `name` — no need to read the tree with
+`get_virtual_user`. The Virtual User's own entry comes first and a container's
+follows its children's order: both sum the runs of what they hold and carry no
+timestamps of their own. For triage, focus on the entries whose `failedTimestamps` is non-empty (the
 actions that failed at least one run); entries with only `successTimestamps`
 passed every run. **Do not fetch failure details yet** — the index alone is
 usually enough to classify.
+
+An entry whose `actionId` reads `<action id> - <label>` is a **sub-request** of
+that action rather than an action of its own: a JMeter embedded resource, a K6
+request inside its groups (`entry-action-id - checkout⫽GET /cart`), or a K6
+`check()` inside its groups (`entry-action-id - checkout⫽check: cart not empty`),
+failed on each run where the check was false — K6 fails no request on a failed
+check, so this row is where it shows. They are listed
+right after their action and named after it. `label`
+carries the part after the separator and is empty for the action's own entry —
+show the label when presenting the row, and pass the whole `actionId` back to
+`get_validation_failure_detail` / `fetch_validation_http_body`, which is the key
+they take.
 
 (A `successTimestamps` entry is also a handle to read a *passing* run's
 body: pass it to `fetch_validation_http_body` with
@@ -112,8 +129,16 @@ For each group, pick the **first** failing action and fetch its detail:
 mcp__octoperf__get_validation_failure_detail(virtualUserId, actionId)
 ```
 
-The detail returns the four HTTP entities (sent/received request and
-response). For very large bodies, you can pull a single one with
+The detail returns the HTTP entities (sent/received request and
+response). `recordedRequest` and `recordedResponse` are **absent** when the
+Virtual User was never recorded — a K6 or Playwright script, for instance: say
+the action has no recorded baseline and read the validation pair on its own
+instead of looking for a diff. The pair of a K6 check names the check, not the
+value it read: method `CHECK`, the check's name as its path, a body
+`check failed: <name>` against `Unknown Status` (`check passed: <name>` against
+`OK` on a passing run). To see what the check read, open the request of the same
+group listed next to it, with `fetch_validation_http_body` and
+`kind=VALIDATION_RESPONSE` on the same run. For very large bodies, you can pull a single one with
 `mcp__octoperf__fetch_validation_http_body(...)`. Its `kind` parameter
 (`RECORDED_REQUEST` / `RECORDED_RESPONSE` / `VALIDATION_REQUEST` /
 `VALIDATION_RESPONSE`) lets you isolate the recorded-vs-replay diff
@@ -202,7 +227,7 @@ Resist the urge to fix three things at once. Apply the fix that should
 clear the largest category, then:
 
 ```
-mcp__octoperf__validate_virtual_user(projectId, virtualUserId, providerId, location, iterations=1)
+mcp__octoperf__validate_virtual_user(projectId, virtualUserId)  # providerId/location only until a validation run has saved them
 mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)  # poll — see octoperf-async-polling
 ```
 
@@ -214,13 +239,13 @@ Re-fetch the failure index. Verify:
 
 ### 5. Engine-level failure (no index, no HTTP entities)
 
-If `get_virtual_user_validation_index` comes back empty but the run is
-still marked failed/aborted, the validation engine itself crashed
-(JMeter OOM, missing Playwright dependency, bad locale, …) — there are
-no HTTP samples to read. (An empty index now means *no validated
-samples at all*: a VU that ran and passed lists every action with only
-`successTimestamps`, so a truly empty result points at the engine, not
-a clean pass.) The validation run produces a `benchResultId`
+If `get_virtual_user_validation_index` reads `total: 0` on every entry
+but the run is still marked failed/aborted, the validation engine itself
+crashed (JMeter OOM, missing Playwright dependency, bad locale, …) — there
+are no HTTP samples to read. (The index lists every action of the tree,
+even one no run reached: a VU that ran and passed shows
+`successTimestamps`, so zero runs everywhere points at the engine, not a
+clean pass.) The validation run produces a `benchResultId`
 (returned by `validate_virtual_user`) which backs the same log storage
 as a real bench run, so:
 
@@ -233,6 +258,20 @@ surfaces the engine logs (and any Playwright trace / screenshot / HAR
 the engine left behind). Read the tail of `jmeter.log` first — startup
 errors are usually within the first 50 lines and fatal errors within
 the last 50.
+
+**K6 is the exception.** A K6 script that doesn't compile, or whose init
+context throws, reports itself: the index lists one failing entry, at the
+action owning the file the error names and at the entrypoint action when it
+names none, and its `VALIDATION_RESPONSE` body carries the
+positioned message (`main.js:2:11 Unexpected token ;`) against a status
+of `Unknown Status`. Both `fetch_validation_http_body` and
+`get_validation_failure_detail` read it — the latter returns the validation
+pair with no recorded baseline, since a K6 script never had one. An exception
+thrown while the script runs (a `TypeError`, a failed `open()`, a `throw`)
+reports itself as a bench error carrying `file:line:column` and the stack
+trace, read from `k6.log` rather than from the index. So an empty
+index for a K6 Virtual User still points at the container (`k6.log`), not at
+the script.
 
 **Log retention.** Validation log files are erased **7 days after the
 run**, or as soon as the user leaves the design screen. Old validation
@@ -253,6 +292,32 @@ valid ~5 minutes) and inspect the bytes locally (e.g. `unzip -p
 trace.zip trace.trace`). This is especially valuable for Playwright
 VU failures — the JMeter wrapper log only sees the spawn, the actual
 selector miss / timeout / navigation abort lives in the trace.
+
+### 5b. Reproduce it locally
+
+A local run answers in seconds where a validation run takes minutes, and
+shows the whole engine output at once. `export_virtual_user` returns the
+Virtual User in its original format, as a ZIP that runs as is:
+
+```
+mcp__octoperf__export_virtual_user(virtualUserId)        # keepOctoperfSpecific=false for a plain JMeter
+# returns { url, method: "GET", expiresAt, instructions } — GET once, unzip
+```
+
+- **JMeter**: `jmeter -n -t <name>.jmx -l result.jtl -JNAME=value` runs one
+  iteration of one user. Every file of the project is in `resources/`, as
+  on a load generator, the constants in the Test Plan; a secret is never exported, the plan reads it from the property of
+  its name — pass each one with `-JNAME=value`.
+- **Playwright**: `npm install`, `npx playwright install chromium` once,
+  then `npx playwright test --trace on` for a trace of every step.
+- **K6**: `k6 run -e NAME=value <entrypoint>.js`; constants and secrets come
+  from `-e`, `row()` reads the whole CSV.
+
+The local run reaches the target from the agent's machine, not from a load
+generator: a failure that only happens on OctoPerf (an IP allow-list, a DNS
+only the load generator resolves, a proxy) does not reproduce here, and
+says so. Apply the fix to the Virtual User, never only to the local copy:
+`patch_virtual_user`, then re-validate (step 4).
 
 ### 6. Stop conditions
 

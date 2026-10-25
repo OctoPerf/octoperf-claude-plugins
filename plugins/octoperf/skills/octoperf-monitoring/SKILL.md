@@ -1,3 +1,8 @@
+---
+name: octoperf-monitoring
+description: Use when monitoring servers during an OctoPerf load test — OS, database, web/app server, JMX, Prometheus, New Relic or SLA monitors. Triggers on "monitor my servers during the test", "add a database monitor", "watch CPU/memory on the target", "why does my monitor collect nothing", "add a threshold on a counter". Covers picking an UP agent that reaches the target, the one create_* tool per monitor type, the create-then-configure counter loop (list_monitor_applications → preview_monitor_counters → update_monitor_counters), folders, thresholds and the synchronous connection check. Requires the OctoPerf MCP server.
+---
+
 # Monitoring — watch servers during a load test
 
 Collect infrastructure metrics (OS, database, web/app server, JMX, Prometheus,
@@ -38,6 +43,10 @@ You don't attach a monitor to a scenario — it's automatic:
   counters, its alarm count, the worst severity), `get_report_threshold_alarms`
   (each breach), `get_report_textual_monitors` (string-valued counters), and the
   generic `get_report_*_values` tools for the numeric curves.
+- **The load generators' own counters are not in that table**: the `Host (…)`, `JVM (…)`
+  and `K6 Runtime (…)` connections a run creates for each injector are read with
+  `get_report_load_generators_values` on the report's `LoadGeneratorsChartReportItem`
+  (`perInjector: true` names the injector behind a peak).
 - **Adding a monitoring chart to a report is an MCP move too**, not a UI-only one:
   `patch_bench_report` accepts a `LineChartReportItem` whose metric is
   `{id: MONITORING, type: NUMBER_COUNTER}` filtered on `connectionName` and
@@ -243,9 +252,12 @@ what a metric *means* pays off.
 - `severity` — `WARNING` or `CRITICAL` (`PASSED` exists for a range that means
   healthy).
 - the range, **exactly one** of `above` (at or above), `below` (at or below) or
-  `between: [min, max]`. **The range is the state to be warned about**, not the
-  healthy one: the alarm holds while the value sits inside it. `above: 80` on a
-  percentage means "warn from 80% up".
+  `between: [min, max]` (both bounds included). **The range is the state to be
+  warned about**, not the healthy one: the alarm holds while the value sits inside
+  it. `above: 80` on a percentage means "warn from 80% up". `between` also takes
+  the range `get_monitor_counters` reads back — `{"lowerEndpoint": 4,
+  "lowerBoundType": "CLOSED", "upperEndpoint": 8, "upperBoundType": "OPEN"}` for
+  `[4, 8)` — a missing bound type meaning `CLOSED`.
 - `occurrences` (default 1) consecutive collections the value must stay in range,
   or `seconds` instead — not both. A single occurrence alarms on the first
   collected value in range, which is noisy on a spiky counter.
@@ -269,12 +281,12 @@ and each threshold in the shape `set_monitor_thresholds` accepts, so reading one
 changing a number and re-sending it is the way to tune alerting. Never contacts the
 agent, so it is fast; capped at 200 counters with `truncated` saying so.
 
-**One round-trip caveat on `between`.** Several types seed a warning range whose
-upper bound is *exclusive* — `[4, 8)` for "high", with a separate critical at `8`,
-so a value of exactly 8 raises the critical alone. The write shape has no way to
-say "exclusive", so re-sending that range as `between: [4, 8]` makes it inclusive
-and both alarms then fire at 8. Read it, but leave it alone unless widening it is
-what you want.
+**`between` comes back as a range, bound types included.** Several types seed a
+warning range whose upper bound is *exclusive* — `[4, 8)` for "high", with a
+separate critical at `8`, so a value of exactly 8 raises the critical alone. It
+reads back with `"upperBoundType": "OPEN"`, and re-sending it as read keeps it
+exclusive; rewriting it as `between: [4, 8]` makes it inclusive, and both alarms
+then fire at 8.
 
 **Do not reach for `preview_monitor_counters` for this.** The two answer different
 questions: preview re-discovers from the agent to show what the target *could*

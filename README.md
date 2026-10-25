@@ -17,10 +17,11 @@ This repo distributes one plugin (`octoperf`) that:
 
 - registers the hosted **OctoPerf MCP server** (`https://api.octoperf.com/mcp`,
   Streamable HTTP, OAuth 2.1 + PKCE + DCR — no API key);
-- installs twenty workflow **skills** that drive the MCP tools end-to-end
-  (recording & import, migration from BlazeMeter / LoadRunner / NeoLoad,
-  correlation, validation, scenario composition, SLAs, monitoring, bench
-  reports, scheduling, notifications, on-premise agents, workspaces…);
+- installs twenty-two workflow **skills** that drive the MCP tools end-to-end
+  (recording & import, K6 scripting, migration from BlazeMeter / Gatling /
+  LoadRunner / NeoLoad, correlation, validation, scenario composition, SLAs,
+  monitoring, bench reports, scheduling, notifications, on-premise agents,
+  workspaces…);
 - ships an `AGENTS.md` reference describing every MCP tool the server
   exposes.
 
@@ -48,7 +49,9 @@ Revoke at any time from **Account → Connected applications** on OctoPerf.
 |------------------------------------|-----------------------------------------------------------------------|
 | `octoperf-har-recording`           | "record my application", "capture a HAR", "import this .har"          |
 | `octoperf-jtl-import`              | "import my JTL", "analyse these JMeter results"                       |
+| `octoperf-k6-scripting`            | "import my K6 script", "run my k6 test on OctoPerf"                   |
 | `octoperf-blazemeter-migration`    | "migrate from BlazeMeter", "convert my Taurus test"                   |
+| `octoperf-gatling-migration`       | "migrate from Gatling", "convert my Gatling simulation"               |
 | `octoperf-loadrunner-migration`    | "migrate from LoadRunner", "convert a .usr script"                    |
 | `octoperf-neoload-migration`       | "migrate from NeoLoad", "convert a .nlp project"                      |
 | `octoperf-auto-correlation`        | "correlate the VU", "fix replay errors", "401/403 on replay"          |

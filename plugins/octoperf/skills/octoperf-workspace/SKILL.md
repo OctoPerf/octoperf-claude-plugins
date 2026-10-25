@@ -1,3 +1,8 @@
+---
+name: octoperf-workspace
+description: Use when managing OctoPerf workspaces and their members — who works where and with which permissions. Triggers on "create a workspace", "add a colleague to the workspace", "change member permissions", "why can't I see this provider / project". Covers what a workspace scopes, creating sparingly (deleting is not the agent's to do), checking the current user first and member management. Requires the OctoPerf MCP server.
+---
+
 # Workspace — who works where, and with what
 
 A workspace is the container everything else lives in. Read this before adding

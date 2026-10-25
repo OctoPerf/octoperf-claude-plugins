@@ -25,6 +25,7 @@ else:
 | `MECHANICAL` | Plain HTTP throughout | Import; expect it to run nearly as-is |
 | `ASSISTED` | HTTP plus scripts or control flow | Import, then work the `unconverted` list |
 | `MOSTLY_MANUAL` | Protocol plugins outnumber HTTP requests | **Say so before importing** |
+| `EMPTY` | No request, no script, no Advanced Action: nothing to convert | **Say so**: the project or the Virtual User holds nothing |
 
 `MOSTLY_MANUAL` is not a difficulty rating, it is a different project.
 A NeoLoad plugin request (Oracle Forms, AMF, GWT, Siebel, RTMP,
@@ -67,7 +68,9 @@ request bodies, without the JavaScript sources, and without the CSV and
 TXT files backing the file variables. You will be reconstructing all of
 them by hand otherwise.
 
-Pass `providerId` to bring the scenarios in. Without it the Virtual
+Pass `providerId` to bring the scenarios in: one of the workspace's own,
+from `list_docker_providers_by_workspace`, or a public one every
+workspace can run on, from `list_public_docker_providers`. Without it the Virtual
 Users are created alone: a NeoLoad scenario names load generators by
 hostname, which says nothing about an OctoPerf provider, so there is
 nothing sensible to default to.

@@ -1,3 +1,8 @@
+---
+name: octoperf-notifications
+description: Use when managing OctoPerf workspace notifications — alerting a channel when a test run starts, ends or fails. Triggers on "notify Slack when a test fails", "send an email at the end of each run", "open a JIRA ticket on failure", "add a Teams / Google Chat / Webex / webhook notification", "which notifications would fire". Covers channel → events → filters → test, write-only secrets (resend them on every update) and the multi-step JIRA lookup flow. Requires the OctoPerf MCP server.
+---
+
 # Workspace notifications — channel + events + filters playbook
 
 Manage a workspace's load-test **notifications** — OctoPerf's **runtime
@@ -56,8 +61,8 @@ only `max` means "at most".
    `workspaceId`, the channel secret/target, `eventIds` (>=1) and optional
    `filters`. For email, set `attachPdfReport: true` to attach the PDF report.
 3. `test_notification(notificationId)` sends a **real** dummy message to the
-   channel so the user can confirm it is wired correctly. It is rate-limited
-   server-side to one test per user every 5 seconds; the result reports whether
+   channel so the user can confirm it is wired correctly. The server may rate
+   limit it per user (HTTP 429); the result reports whether
    the dispatch was **accepted**, not delivered.
 4. Reachability: Teams / Google Chat / HTTP webhook URLs must be reachable
    **from OctoPerf's servers** (public internet on SaaS).

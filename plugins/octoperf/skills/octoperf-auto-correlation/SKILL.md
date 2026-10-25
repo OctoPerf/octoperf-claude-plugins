@@ -172,7 +172,7 @@ mcp__octoperf__apply_correlations_to_virtual_user(projectId, virtualUserId)
 ### 3. Re-validate
 
 ```
-mcp__octoperf__validate_virtual_user(projectId, virtualUserId, providerId, location, iterations=1)
+mcp__octoperf__validate_virtual_user(projectId, virtualUserId)  # providerId/location only until a validation run has saved them
 mcp__octoperf__get_virtual_user_validation(projectId, virtualUserId)  # poll until finished=true
 ```
 
@@ -262,4 +262,4 @@ Loop steps 3-4 until validation is clean. Two stop conditions:
 
 - `octoperf-validation-triage` — when validation has many failures of mixed kinds.
 - `octoperf-async-polling` — sleep cadence for `get_virtual_user_validation` and `get_task_result`.
-- OctoPerf correlation docs: <https://doc.octoperf.com/design/correlations/>
+- OctoPerf correlation docs: <https://api.octoperf.com/doc/design/edit-virtual-user/configuration/auto-correlation/>

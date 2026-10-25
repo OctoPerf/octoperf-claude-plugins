@@ -1,6 +1,6 @@
 ---
 name: octoperf-loadrunner-migration
-description: Use when migrating a LoadRunner script or Controller scenario to OctoPerf. Triggers on "migrate from LoadRunner", "import my VuGen script", "convert a .usr script", "import an .lrs scenario", "we're leaving Micro Focus/OpenText LoadRunner", "can OctoPerf read a LoadRunner script". Decides first whether the script is worth migrating, imports what converts mechanically — including the load shape a .lrs describes — then finishes by hand what has no OctoPerf equivalent: hand-written C, conditions reading C locals, recorded cookies, parameterised servers, load generators, non-HTTP protocols. Requires the OctoPerf MCP server.
+description: 'Use when migrating a LoadRunner script or Controller scenario to OctoPerf. Triggers on "migrate from LoadRunner", "import my VuGen script", "convert a .usr script", "import an .lrs scenario", "we''re leaving Micro Focus/OpenText LoadRunner", "can OctoPerf read a LoadRunner script". Decides first whether the script is worth migrating, imports what converts mechanically — including the load shape a .lrs describes — then finishes by hand what has no OctoPerf equivalent: hand-written C, conditions reading C locals, recorded cookies, parameterised servers, load generators, non-HTTP protocols. Requires the OctoPerf MCP server.'
 ---
 
 # OctoPerf — LoadRunner migration
@@ -31,6 +31,7 @@ else:
 | `MECHANICAL` | Plain HTTP throughout | Import; expect it to run nearly as-is |
 | `ASSISTED` | HTTP plus C helpers or control flow | Import, then work the `unconverted` list |
 | `MOSTLY_MANUAL` | The C outweighs the requests | **Say so before importing** |
+| `EMPTY` | No call at all: there is nothing to convert | **Say so**: the upload is missing its script |
 
 `MOSTLY_MANUAL` is not a difficulty rating, it is a different script. A
 VuGen `.c` is C: an author is free to build a whole framework in it, and
@@ -82,9 +83,10 @@ appears to convert and replays as one page fetched six times.
 
 Zip the folder with its `.usr`, its `.c` sources, `default.cfg`,
 `default.usp`, the `.prm` and the `.dat` files it names, and `data/`.
-Leave out `result*/`, `data/http.db/` (VuGen's snapshot database — the
-largest in the corpus holds 1630 files an import never reads) and the
-replay logs. `pre_cci.c` and `combined_*.c` are dropped by the reader
+Leave out the replay results (`result1/`), `data.zip`, `data/http.db/`
+(VuGen's snapshot database — the largest in the corpus holds 1630 files an
+import never reads) and the replay logs (`output.txt`, `mdrv.log`).
+`pre_cci.c` and `combined_*.c` are dropped by the reader
 whether you send them or not: the first declares every LoadRunner
 function the script *could* call, so counting it turns nine real calls
 into a hundred and five.

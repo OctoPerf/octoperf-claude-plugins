@@ -229,8 +229,8 @@ scenarios:
 - **(a) `script:` naming anything else** (`.py`, `.scala`, a Selenium
   project) — not migrated, report it.
 - **(b) inline `requests:`** — build the VU yourself. For a flat list of
-  URLs, `import_urls_virtual_user` with `DO_NOT_CRAWL` is the shortest
-  path. Anything with bodies, extractors, assertions or `think-time`
+  URLs, `import_urls_virtual_user` with `DO_NOT_CRAWL` and `name` set to
+  the test's name is the shortest path. Anything with bodies, extractors, assertions or `think-time`
   needs `patch_virtual_user` against `octoperf://schema/vu` afterwards.
   Say how much of it you rebuilt.
 
@@ -272,7 +272,8 @@ Two mappings that are not one-to-one, and that you must state rather
 than guess:
 
 - **Locations.** BlazeMeter's `us-east-1` is a BlazeMeter region, not an
-  OctoPerf one. Call `list_docker_providers_by_workspace`, show the
+  OctoPerf one. Call `list_docker_providers_by_workspace` and
+  `list_public_docker_providers`, show the
   user the providers and locations they actually have, and let them
   choose. An unknown location is refused by the tool.
 - **Concurrency.** BlazeMeter's `concurrency` is per location and is
